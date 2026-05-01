@@ -1,0 +1,47 @@
+{
+  "entities": {
+    "AppSettings": {
+      "title": "Application Settings",
+      "description": "Global settings for prices, scrap, and economy items",
+      "type": "object",
+      "properties": {
+        "rawPrices": {
+          "type": "object",
+          "description": "Prices per steel grade. Keys are sanitized grade names."
+        },
+        "scrapPrice": {
+          "type": "string",
+          "description": "Global scrap price"
+        },
+        "remnantPrice": {
+          "type": "string",
+          "description": "Global remnant price"
+        },
+        "customGrades": {
+          "type": "array",
+          "description": "List of custom steel grades added by admin"
+        },
+        "remnantPricing": {
+          "type": "object",
+          "description": "Pricing types for remnants per grade and profile"
+        },
+        "economyItems": {
+          "type": "array",
+          "description": "List of economy items for calculations"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update timestamp"
+        }
+      },
+      "required": ["updatedAt"]
+    }
+  },
+  "firestore": {
+    "/settings/prices": {
+      "schema": "AppSettings",
+      "description": "Single document holding all global application settings"
+    }
+  }
+}

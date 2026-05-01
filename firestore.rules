@@ -1,0 +1,26 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Settings collection
+    match /settings/prices {
+      // Access to settings is allowed for any authenticated user
+      // In a production app, we would restrict writes to admins only
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+  }
+}
