@@ -17,10 +17,9 @@ service cloud.firestore {
 
     // Settings collection
     match /settings/prices {
-      // Access to settings is allowed for any authenticated user
-      // In a production app, we would restrict writes to admins only
-      allow read: if isSignedIn();
-      allow write: if isSignedIn();
+      // Access to settings is completely public
+      allow read: if true;
+      allow write: if true;
     }
   }
 }
