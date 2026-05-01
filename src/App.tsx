@@ -45,7 +45,7 @@ export default function App() {
   useEffect(() => {
     // Just assume connected automatically
     setUser({ uid: "local-user" });
-    setIsCloudActive(navigator.onLine);
+    setIsCloudActive(true);
     setIsConnecting(false);
 
     const handleOnline = () => {

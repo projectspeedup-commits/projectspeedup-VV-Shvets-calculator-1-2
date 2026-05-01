@@ -138,6 +138,15 @@ export function AdminPanel({
     tableContainerRef.current.scrollLeft = scrollLeftState - walk;
   };
 
+  useEffect(() => {
+    if (initialRawPrices) setRawPrices(initialRawPrices);
+    if (initialScrapPrice) setScrap(initialScrapPrice);
+    if (initialRemnantPrice) setRemnant(initialRemnantPrice);
+    if (initialCustomGrades) setCustomGrades(initialCustomGrades);
+    if (initialRemnantPricing) setRemnantPricing(initialRemnantPricing);
+    if (initialEconomyItems) setEconomyItems(initialEconomyItems);
+  }, [initialRawPrices, initialScrapPrice, initialRemnantPrice, initialCustomGrades, initialRemnantPricing, initialEconomyItems]);
+
   // Synchronize prices in calculation results when rawPrices changes
   useEffect(() => {
     if (calculationResults.length === 0) return;
