@@ -1,6 +1,6 @@
 import { DEFAULT_RAW_PRICES, sanitizeKey, DEFAULT_ECONOMY_ITEMS } from "./lib/constants";
 import { app as firebaseApp, auth, db, appId } from "./lib/firebase";
-import { onAuthStateChanged, signInAnonymously, signInWithCustomToken } from "firebase/auth";
+import { onAuthStateChanged, signInAnonymously, signInWithCustomToken, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { AdminPanel } from "./components/AdminPanel";
@@ -49,7 +49,12 @@ export default function App() {
       setIsConnecting(false);
       return;
     }
+
+    let retryTimeout: NodeJS.Timeout;
+
     const initAuth = async () => {
+      if (auth.currentUser) return; // Already logged in
+      
       setIsConnecting(true);
       setConnectionError(null);
       try {
@@ -64,26 +69,44 @@ export default function App() {
            await signInAnonymously(auth);
         }
       } catch (e: any) {
-        console.warn("Auth failed or timed out, working offline", e);
+        console.warn("Auth failed, working offline", e);
         setUser({ uid: "local-user" });
         setIsCloudActive(false);
         setConnectionError(e.message || "Failed to connect");
+        
+        // Only retry if it's a network error, not if it's disabled
+        if (e.message && e.message.includes("network-request-failed")) {
+          retryTimeout = setTimeout(initAuth, 10000);
+        }
       } finally {
         setIsConnecting(false);
       }
     };
-    initAuth();
+
+    const handleOnline = () => {
+      clearTimeout(retryTimeout);
+      initAuth();
+    };
+    window.addEventListener('online', handleOnline);
+
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       if (u) {
         setUser(u);
         setIsCloudActive(true);
+        clearTimeout(retryTimeout);
       } else {
         setUser({ uid: "local-user" });
         setIsCloudActive(false);
+        initAuth(); // Try to sign in anonymously if not logged in
       }
       setIsConnecting(false);
     });
-    return () => unsubscribe();
+    
+    return () => {
+      unsubscribe();
+      window.removeEventListener('online', handleOnline);
+      clearTimeout(retryTimeout);
+    };
   }, []);
 
   useEffect(() => {
@@ -248,6 +271,19 @@ export default function App() {
     }
   };
 
+  const handleGoogleLogin = async () => {
+    if (!auth) return;
+    try {
+      setConnectionError(null);
+      setIsConnecting(true);
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    } catch (e: any) {
+      setConnectionError(e.message || "Ошика входа Google");
+      setIsConnecting(false);
+    }
+  };
+
   const toggleTheme = () => setIsDarkMode(prev => !prev);
 
   useEffect(() => {
@@ -279,6 +315,7 @@ export default function App() {
                 onManagerLogin={() => setView("manager")} 
                 onPurchasingLogin={() => setView("purchasing")}
                 onAdminLogin={() => setView("admin")} 
+                onGoogleLogin={handleGoogleLogin}
                 isCloudActive={isCloudActive}
                 isConnecting={isConnecting}
                 connectionError={connectionError}
