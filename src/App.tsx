@@ -39,6 +39,7 @@ export default function App() {
   const [globalScrapPrice, setGlobalScrapPrice] = useState("20000");
   const [globalRemnantPrice, setGlobalRemnantPrice] = useState("30000");
   const [customGrades, setCustomGrades] = useState<string[]>([]);
+  const [deletedGrades, setDeletedGrades] = useState<string[]>([]);
   const [remnantPricing, setRemnantPricing] = useState<Record<string, { round: string; hex: string }>>({});
   const [economyItems, setEconomyItems] = useState<any[]>(DEFAULT_ECONOMY_ITEMS);
 
@@ -74,6 +75,7 @@ export default function App() {
         const savedScrap = window.localStorage.getItem("arsenal_scrap_price");
         const savedRemnant = window.localStorage.getItem("arsenal_remnant_price");
         const savedCustomGrades = window.localStorage.getItem("arsenal_custom_grades");
+        const savedDeletedGrades = window.localStorage.getItem("arsenal_deleted_grades");
         const savedRemnantPricing = window.localStorage.getItem("arsenal_remnant_pricing");
         const savedEconomy = window.localStorage.getItem("arsenal_economy_items");
 
@@ -81,6 +83,12 @@ export default function App() {
         if (savedCustomGrades) {
           loadedCustomGrades = JSON.parse(savedCustomGrades);
           setCustomGrades(loadedCustomGrades);
+        }
+
+        let loadedDeletedGrades: string[] = [];
+        if (savedDeletedGrades) {
+          loadedDeletedGrades = JSON.parse(savedDeletedGrades);
+          setDeletedGrades(loadedDeletedGrades);
         }
 
         if (savedRemnantPricing) {
@@ -126,6 +134,13 @@ export default function App() {
               currentCustomGrades = data.customGrades;
               setCustomGrades(currentCustomGrades);
               if (typeof window !== "undefined") window.localStorage.setItem("arsenal_custom_grades", JSON.stringify(currentCustomGrades));
+            }
+
+            let currentDeletedGrades = deletedGrades;
+            if (data.deletedGrades) {
+              currentDeletedGrades = data.deletedGrades;
+              setDeletedGrades(currentDeletedGrades);
+              if (typeof window !== "undefined") window.localStorage.setItem("arsenal_deleted_grades", JSON.stringify(currentDeletedGrades));
             }
 
             if (data.remnantPricing) {
@@ -191,12 +206,14 @@ export default function App() {
     remnantStr: string,
     cGrades: string[],
     rPricing: Record<string, { round: string; hex: string }>,
-    eItems?: any[]
+    eItems?: any[],
+    dGrades?: string[]
   ) => {
     setGlobalRawPrices(rawPricesObj);
     setGlobalScrapPrice(scrapStr);
     setGlobalRemnantPrice(remnantStr);
     if (cGrades) setCustomGrades(cGrades);
+    if (dGrades) setDeletedGrades(dGrades);
     if (rPricing) setRemnantPricing(rPricing);
     if (eItems) setEconomyItems(eItems);
 
@@ -206,6 +223,7 @@ export default function App() {
         window.localStorage.setItem("arsenal_scrap_price", scrapStr);
         window.localStorage.setItem("arsenal_remnant_price", remnantStr);
         if (cGrades) window.localStorage.setItem("arsenal_custom_grades", JSON.stringify(cGrades));
+        if (dGrades) window.localStorage.setItem("arsenal_deleted_grades", JSON.stringify(dGrades));
         if (rPricing) window.localStorage.setItem("arsenal_remnant_pricing", JSON.stringify(rPricing));
         if (eItems) window.localStorage.setItem("arsenal_economy_items", JSON.stringify(eItems));
       }
@@ -230,6 +248,7 @@ export default function App() {
         updatedAt: new Date().toISOString()
       };
       if (cGrades) payload.customGrades = cGrades;
+      if (dGrades) payload.deletedGrades = dGrades;
       if (rPricing) payload.remnantPricing = rPricing;
       if (eItems) payload.economyItems = eItems;
 
@@ -297,6 +316,7 @@ export default function App() {
                   initialScrap={globalScrapPrice}
                   initialRemnant={globalRemnantPrice}
                   initialCustomGrades={customGrades}
+                  initialDeletedGrades={deletedGrades}
                   initialRemnantPricing={remnantPricing}
                   initialEconomyItems={economyItems}
                   onSave={handleSaveGlobal}
@@ -324,6 +344,7 @@ export default function App() {
                   initialScrap={globalScrapPrice}
                   initialRemnant={globalRemnantPrice}
                   initialCustomGrades={customGrades}
+                  initialDeletedGrades={deletedGrades}
                   initialRemnantPricing={remnantPricing}
                   initialEconomyItems={economyItems}
                   onSave={handleSaveGlobal}
@@ -353,6 +374,7 @@ export default function App() {
                   adminScrapPrice={globalScrapPrice}
                   adminRemnantPrice={globalRemnantPrice}
                   customGrades={customGrades}
+                  deletedGrades={deletedGrades}
                   remnantPricing={remnantPricing}
                   economyItems={economyItems}
                   onLogout={() => setView("login")}

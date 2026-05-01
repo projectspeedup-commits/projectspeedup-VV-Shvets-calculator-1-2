@@ -41,6 +41,7 @@ interface AdminPanelProps {
   initialScrap: string;
   initialRemnant: string;
   initialCustomGrades: string[];
+  initialDeletedGrades?: string[];
   initialRemnantPricing: Record<string, { round: string; hex: string }>;
   initialEconomyItems?: EconomyItem[];
   onSave: (
@@ -49,7 +50,8 @@ interface AdminPanelProps {
     remnant: string,
     customGrades: string[],
     remnantPricing: Record<string, { round: string; hex: string }>,
-    economyItems: EconomyItem[]
+    economyItems: EconomyItem[],
+    deletedGrades?: string[]
   ) => Promise<void>;
   onLogout: () => void;
   isCloudActive: boolean;
@@ -64,6 +66,7 @@ export function AdminPanel({
   initialScrap,
   initialRemnant,
   initialCustomGrades,
+  initialDeletedGrades,
   initialRemnantPricing,
   initialEconomyItems,
   onSave,
@@ -79,6 +82,7 @@ export function AdminPanel({
   const [scrap, setScrap] = useState(initialScrap);
   const [remnant, setRemnant] = useState(initialRemnant);
   const [customGrades, setCustomGrades] = useState(initialCustomGrades || []);
+  const [deletedGrades, setDeletedGrades] = useState<string[]>(initialDeletedGrades || []);
   const [remnantPricing, setRemnantPricing] = useState<Record<string, { round: string; hex: string }>>(initialRemnantPricing || {});
   const [economyItems, setEconomyItems] = useState<EconomyItem[]>(() => {
     if (!initialEconomyItems || initialEconomyItems.length === 0) return DEFAULT_ECONOMY_ITEMS;
@@ -379,37 +383,39 @@ export function AdminPanel({
         }
         
         let billetLength = 0;
-        const techEnds = 181.1;
+        const totalTechCoef = item.type === "Шестигранник" ? 1.03 * 1.003 : 1.027 * 1.003;
 
         if (item.lengthType === "НД") {
           billetLength = 6000;
         } else {
-          let pcs = 1;
-          let chosenBillet = 0;
           const safeLength = item.length || 6000;
-          while (pcs <= 100) {
-            const requiredBillet = (pcs * safeLength + techEnds) / drawRatio;
-            const roundedBillet = Math.ceil(requiredBillet / 100) * 100;
+          const options = [];
+          
+          for (let pcs = 1; pcs <= 60; pcs++) {
+            const idealBillet = (pcs * safeLength * totalTechCoef) / drawRatio;
+            const roundedBillet = Math.ceil(idealBillet / 100) * 100;
             
-            if (isNaN(roundedBillet) || roundedBillet > 8800) {
-              if (pcs === 1) {
-                chosenBillet = isNaN(roundedBillet) ? 6000 : roundedBillet;
+            if (roundedBillet >= 4000 && roundedBillet <= 8800) {
+              const drawLen = roundedBillet * drawRatio;
+              const usable = drawLen / totalTechCoef;
+              const scrap = usable - (pcs * safeLength);
+              if (scrap >= 0) {
+                options.push({ n: pcs, billetLength: roundedBillet, scrap });
               }
-              break;
             }
-            chosenBillet = roundedBillet;
-            pcs++;
           }
           
-          if (chosenBillet < 5500) {
-            chosenBillet = Math.max(chosenBillet, 5500);
+          if (options.length > 0) {
+            options.sort((a, b) => a.scrap - b.scrap);
+            billetLength = options[0].billetLength;
+          } else {
+            billetLength = 6000;
           }
-          
-          billetLength = chosenBillet;
         }
 
         const drawLength = billetLength * drawRatio;
-        const usefulLength = drawLength - techEnds;
+        const usefulLength = drawLength / totalTechCoef;
+        const techEnds = drawLength - usefulLength;
         
         const piecesCount = item.lengthType === "НД" ? 0 : Math.floor(usefulLength / item.length);
         const actualUsefulLength = item.lengthType === "НД" ? usefulLength : piecesCount * item.length;
@@ -425,7 +431,7 @@ export function AdminPanel({
           
           for (let l = MIN_B; l <= MAX_B; l += STEP) {
             const dL = l * drawRatio;
-            const uL = dL - techEnds;
+            const uL = dL / totalTechCoef;
             const pCount = Math.floor(uL / item.length);
             if (pCount <= 0) continue;
             const aUL = pCount * item.length;
@@ -527,6 +533,7 @@ export function AdminPanel({
     setScrap(prev => prev === initialScrap ? prev : initialScrap);
     setRemnant(prev => prev === initialRemnant ? prev : initialRemnant);
     setCustomGrades(prev => JSON.stringify(prev) === JSON.stringify(initialCustomGrades || []) ? prev : (initialCustomGrades || []));
+    setDeletedGrades(prev => JSON.stringify(prev) === JSON.stringify(initialDeletedGrades || []) ? prev : (initialDeletedGrades || []));
     setRemnantPricing(prev => JSON.stringify(prev) === JSON.stringify(initialRemnantPricing || {}) ? prev : (initialRemnantPricing || {}));
     
     if (initialEconomyItems && initialEconomyItems.length > 0) {
@@ -537,9 +544,9 @@ export function AdminPanel({
         return merged;
       });
     }
-  }, [initialRawPrices, initialScrap, initialRemnant, initialCustomGrades, initialRemnantPricing, initialEconomyItems]);
+  }, [initialRawPrices, initialScrap, initialRemnant, initialCustomGrades, initialDeletedGrades, initialRemnantPricing, initialEconomyItems]);
 
-  const allGrades = [...DEFAULT_STEEL_GRADES, ...customGrades];
+  const allGrades = [...DEFAULT_STEEL_GRADES, ...customGrades].filter(g => !deletedGrades.includes(g));
 
   const RemnantPricingTooltip = () => (
     <div className="group relative inline-block ml-1 align-middle">
@@ -605,7 +612,12 @@ export function AdminPanel({
   };
 
   const handleRemoveGrade = (gradeToRemove: string) => {
-    setCustomGrades(customGrades.filter((g) => g !== gradeToRemove));
+    if (DEFAULT_STEEL_GRADES.includes(gradeToRemove)) {
+      setDeletedGrades([...deletedGrades, gradeToRemove]);
+    } else {
+      setCustomGrades(customGrades.filter((g) => g !== gradeToRemove));
+    }
+
     const newPrices = { ...rawPrices };
     delete newPrices[gradeToRemove];
     setRawPrices(newPrices);
@@ -619,7 +631,7 @@ export function AdminPanel({
     setIsSaving(true);
     setSaveError("");
     try {
-      const savePromise = onSave(rawPrices, scrap, remnant, customGrades, remnantPricing, economyItems);
+      const savePromise = onSave(rawPrices, scrap, remnant, customGrades, remnantPricing, economyItems, deletedGrades);
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error("CloudTimeout")), 5000)
       );
@@ -1091,7 +1103,7 @@ export function AdminPanel({
                               <div className="space-y-2 max-h-[160px] overflow-y-auto pr-2 custom-scrollbar">
                                 {Object.entries<{weight: number, cost: number}>(
                                   calculationResults.reduce((acc, curr) => {
-                                    const label = curr.lengthType === "НД" ? "НД 6000" : `МД ${curr.billetLength}`;
+                                    const label = curr.lengthType === "НД" ? "НД" : `МД ${curr.billetLength}`;
                                     const key = `${curr.grade} | ${label}`;
                                     if (!acc[key]) acc[key] = { weight: 0, cost: 0 };
                                     acc[key].weight += curr.totalWeight;
@@ -1260,14 +1272,14 @@ export function AdminPanel({
                                       res.type || "",
                                       res.grade || "",
                                       String(res.diameter).replace(".", ","),
-                                      res.lengthType === "НД" ? "НД 6000" : `МД ${res.length}`,
+                                      res.lengthType === "НД" ? "НД (3000-6000)" : `МД ${res.length}`,
                                       String(res.weightTons).replace(".", ","),
                                       String(res.remainingToProcess.toFixed(3)).replace(".", ","),
                                       "Круг г/к ГОСТ 2590-2006",
                                       res.grade,
                                       String(res.billetDia).replace(".", ","),
                                       String(res.totalWeight.toFixed(3)).replace(".", ","),
-                                      res.lengthType === "НД" ? "НД 6000" : `МД ${res.billetLength}`
+                                      res.lengthType === "НД" ? "НД" : `МД ${res.billetLength}`
                                     ];
                                     if (!isPurchasingMode) {
                                       row.push(String(res.price).replace(".", ","), String(res.totalCost.toFixed(0)).replace(".", ","));
@@ -1320,14 +1332,14 @@ export function AdminPanel({
                                       res.type || "",
                                       res.grade || "",
                                       String(res.diameter).replace(".", ","),
-                                      res.lengthType === "НД" ? "НД 6000" : `МД ${res.length}`,
+                                      res.lengthType === "НД" ? "НД (3000-6000)" : `МД ${res.length}`,
                                       String(res.weightTons).replace(".", ","),
                                       String(res.remainingToProcess.toFixed(3)).replace(".", ","),
                                       "Круг г/к ГОСТ 2590-2006",
                                       res.grade,
                                       String(res.billetDia).replace(".", ","),
                                       String(res.totalWeight.toFixed(3)).replace(".", ","),
-                                      res.lengthType === "НД" ? "НД 6000" : `МД ${res.billetLength}`
+                                      res.lengthType === "НД" ? "НД" : `МД ${res.billetLength}`
                                     ];
                                     if (!isPurchasingMode) {
                                       row.push(String(res.price).replace(".", ","), String(res.totalCost.toFixed(0)).replace(".", ","));
@@ -1455,7 +1467,7 @@ export function AdminPanel({
                                       {parseFloat(res.diameter.toFixed(2))}
                                     </td>
                                     <td className="px-5 py-3 whitespace-nowrap text-center text-slate-800 dark:text-slate-200 font-medium">
-                                      {res.lengthType === "НД" ? "НД 6000" : `МД ${res.length}`}
+                                      {res.lengthType === "НД" ? "НД (3000-6000)" : `МД ${res.length}`}
                                     </td>
                                     <td className="px-5 py-3 whitespace-nowrap text-center font-black text-slate-900 dark:text-white">
                                       {res.weightTons.toFixed(3)}
@@ -1476,7 +1488,7 @@ export function AdminPanel({
                                       {res.totalWeight.toFixed(3)}
                                     </td>
                                     <td className="px-5 py-3 whitespace-nowrap text-slate-500 text-center">
-                                      {res.lengthType === "НД" ? "НД 6000" : `МД ${res.billetLength}`}
+                                      {res.lengthType === "НД" ? "НД" : `МД ${res.billetLength}`}
                                     </td>
                                     <td className="px-5 py-3 whitespace-nowrap text-center">
                                       <div className="flex flex-col items-center gap-1">
@@ -1491,7 +1503,7 @@ export function AdminPanel({
                                                 if (item.id === res.id && res.optimizedBilletLength) {
                                                   const newBilletLength = res.optimizedBilletLength;
                                                   const newDrawLen = newBilletLength * item.drawRatio;
-                                                  const newUsefulLen = newDrawLen - item.techEnds;
+                                                  const newUsefulLen = newDrawLen / (item.type === "Шестигранник" ? 1.03 * 1.003 : 1.027 * 1.003);
                                                   const newPcs = Math.floor(newUsefulLen / item.length);
                                                   const newActualUL = newPcs * item.length;
                                                   const newKim = newDrawLen > 0 ? newActualUL / newDrawLen : 0;
@@ -1726,7 +1738,6 @@ export function AdminPanel({
                                 </thead>
                                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                                   {allGrades.map((grade) => {
-                                    const isCustom = customGrades.includes(grade);
                                     const prices = rawPrices[grade] || { md: "", nd: "" };
 
                                     return (
@@ -1759,7 +1770,6 @@ export function AdminPanel({
                                           </div>
                                         </td>
                                         <td className="px-4 py-4 text-center align-middle">
-                                          {isCustom ? (
                                             <button
                                               onClick={() => handleRemoveGrade(grade)}
                                               className="text-slate-400 hover:text-red-500 transition-colors p-2 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20"
@@ -1767,9 +1777,6 @@ export function AdminPanel({
                                             >
                                               <Trash2 className="w-5 h-5" />
                                             </button>
-                                          ) : (
-                                            <div className="w-9"></div>
-                                          )}
                                         </td>
                                       </tr>
                                     );

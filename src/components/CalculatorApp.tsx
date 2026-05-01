@@ -14,6 +14,7 @@ interface CalculatorAppProps {
   adminScrapPrice: string;
   adminRemnantPrice: string;
   customGrades: string[];
+  deletedGrades?: string[];
   remnantPricing: Record<string, { round: string; hex: string }>;
   economyItems?: EconomyItem[];
   onLogout: () => void;
@@ -30,6 +31,7 @@ export function CalculatorApp({
   adminScrapPrice,
   adminRemnantPrice,
   customGrades,
+  deletedGrades = [],
   remnantPricing,
   economyItems = DEFAULT_ECONOMY_ITEMS,
   onLogout,
@@ -65,7 +67,9 @@ export function CalculatorApp({
   const [isEconomyExpanded, setIsEconomyExpanded] = useState(false);
 
   const activeData = profileType === "round" ? ROUND_DATA : HEX_DATA;
-  const allGrades = useMemo(() => [...DEFAULT_STEEL_GRADES, ...(customGrades || [])], [customGrades]);
+  const allGrades = useMemo(() => {
+    return [...DEFAULT_STEEL_GRADES, ...(customGrades || [])].filter(g => !deletedGrades.includes(g));
+  }, [customGrades, deletedGrades]);
 
   const currentAdminRawPrice = useMemo(() => {
     if (!steelGrade || !adminRawPrices) return "";
@@ -100,8 +104,8 @@ export function CalculatorApp({
     return activeData
       .filter((item) => {
         if (item.target !== targetVal) return false;
-        // Business logic: if target >= 50.5, raw material should be no more than 2mm above target
-        if (profileType === "round" && targetVal >= 50.5 && item.raw > targetVal + 2) {
+        // Business logic: if target >= 50.5, raw material should be no more than 3mm above target
+        if (profileType === "round" && targetVal >= 50.5 && item.raw > targetVal + 3) {
           return false;
         }
         return true;
@@ -276,7 +280,7 @@ export function CalculatorApp({
       // Округляем вверх до ближайших 100 мм (согласно запросу)
       const roundedBillet = Math.ceil(idealBillet / 100) * 100;
       
-      if (roundedBillet >= 5500 && roundedBillet <= 8800) {
+      if (roundedBillet >= 4000 && roundedBillet <= 8800) {
         const estUseful = (roundedBillet * draw) / tech;
         const scrap = estUseful - (n * targetPiece);
         // Добавляем только если остаток положительный (поместится)
@@ -653,7 +657,7 @@ export function CalculatorApp({
   };
 
   const handleReset = () => {
-    setProfileType("round");
+    setProfileType("round"); setFrontCoef("1.027");
     setSteelGrade("");
     setSelectedTarget("");
     setSelectedRaw("");
@@ -1069,7 +1073,7 @@ export function CalculatorApp({
             {/* Segmented Control */}
             <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-xl flex w-full sm:max-w-[280px] sm:mx-auto mb-6 print-hide">
               <button
-                onClick={() => setProfileType("round")}
+                onClick={() => { setProfileType("round"); setFrontCoef("1.027"); }}
                 className={`flex-1 py-1.5 px-3 rounded-lg flex items-center justify-center gap-1.5 text-xs font-medium transition-all duration-200 focus:outline-none ${
                   profileType === "round" ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm" : "text-slate-500 hover:text-slate-900 hover:bg-slate-200/50"
                 }`}
@@ -1077,7 +1081,7 @@ export function CalculatorApp({
                 <Circle className="w-3.5 h-3.5" /> Круг
               </button>
               <button
-                onClick={() => setProfileType("hex")}
+                onClick={() => { setProfileType("hex"); setFrontCoef("1.03"); }}
                 className={`flex-1 py-1.5 px-3 rounded-lg flex items-center justify-center gap-1.5 text-xs font-medium transition-all duration-200 focus:outline-none ${
                   profileType === "hex" ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm" : "text-slate-500 hover:text-slate-900 hover:bg-slate-200/50"
                 }`}
