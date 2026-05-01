@@ -502,7 +502,7 @@ export function CalculatorApp({
   }, [sellPrice, currentAdminRawPrice, adminScrapPrice, effectiveRemnantPrice, orderWeight, advancedRemnantStats, economyItems]);
 
   useEffect(() => {
-    if (!db || !user || user.uid === "local-user") return;
+    if (!db || !user) return;
 
     const q = query(
       collection(db, "calculations"),
@@ -531,8 +531,8 @@ export function CalculatorApp({
   };
 
   const handleSave = async () => {
-    if (!db || !user || user.uid === "local-user") {
-      showNotify("Функция сохранения доступна только при активном облачном соединении.", "error");
+    if (!db || !user) {
+      showNotify("Функция сохранения недоступна (нет подключения к БД).", "error");
       return;
     }
     if (!steelGrade || !selectedTarget || !selectedRaw) {
@@ -587,8 +587,8 @@ export function CalculatorApp({
   };
 
   const clearAllHistory = async () => {
-    if (!db || !user || user.uid === "local-user") {
-      showNotify("Удаление истории доступно только при активном облачном соединении.", "error");
+    if (!db || !user) {
+      showNotify("Удаление истории недоступно (нет подключения к БД).", "error");
       return;
     }
     

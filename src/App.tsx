@@ -113,7 +113,7 @@ export default function App() {
       }
     } catch (e) {}
 
-    if (db && isCloudActive && user.uid !== "local-user") {
+    if (db && isCloudActive) {
       const pricesDocRef = doc(db, "settings", "prices");
       const unsubscribe = onSnapshot(
         pricesDocRef,
@@ -204,7 +204,7 @@ export default function App() {
       }
     } catch (e) {}
 
-    if (db && user && isCloudActive && user.uid !== "local-user") {
+    if (db && isCloudActive) {
       const firestoreRawPrices: Record<string, { md: string; nd: string }> = {};
       for (const [k, v] of Object.entries(rawPricesObj)) {
         firestoreRawPrices[sanitizeKey(k)] = v;
