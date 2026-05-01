@@ -143,7 +143,7 @@ export const ROUND_DATA = [
   { target: 23, raw: 24, coef: 1.089 }, { target: 23.5, raw: 25, coef: 1.132 }, { target: 23.5, raw: 26, coef: 1.224 }, { target: 24, raw: 25, coef: 1.085 },
   { target: 24, raw: 26, coef: 1.174 }, { target: 24.5, raw: 26, coef: 1.126 }, { target: 25, raw: 26, coef: 1.082 },
   { target: 25.5, raw: 28, coef: 1.206 }, { target: 25.9, raw: 28, coef: 1.169 }, { target: 26, raw: 28, coef: 1.160 }, { target: 26.5, raw: 28, coef: 1.116 }, { target: 27, raw: 28, coef: 1.075 },
-  { target: 27.5, raw: 30, coef: 1.190 }, { target: 27.65, raw: 30, coef: 1.177 }, { target: 27.68, raw: 30, coef: 1.175 }, { target: 28, raw: 30, coef: 1.148 }, { target: 28.5, raw: 30, coef: 1.108 }, { target: 29, raw: 30, coef: 1.070 },
+  { target: 27.5, raw: 30, coef: 1.190 }, { target: 27.6, raw: 30, coef: 1.182 }, { target: 27.65, raw: 30, coef: 1.177 }, { target: 27.68, raw: 30, coef: 1.175 }, { target: 28, raw: 30, coef: 1.148 }, { target: 28.5, raw: 30, coef: 1.108 }, { target: 29, raw: 30, coef: 1.070 },
   { target: 29.5, raw: 32, coef: 1.177 }, { target: 30, raw: 32, coef: 1.138 },
   { target: 30.5, raw: 32, coef: 1.101 }, { target: 31, raw: 32, coef: 1.066 }, { target: 31.5, raw: 34, coef: 1.165 }, { target: 31.75, raw: 34, coef: 1.146 }, { target: 32, raw: 34, coef: 1.129 },
   { target: 32.5, raw: 34, coef: 1.095 }, { target: 33, raw: 34, coef: 1.062 }, { target: 33.5, raw: 36, coef: 1.155 }, { target: 34, raw: 36, coef: 1.121 },

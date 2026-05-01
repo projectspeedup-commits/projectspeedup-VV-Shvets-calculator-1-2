@@ -821,27 +821,157 @@ export function AdminPanel({
               </div>
 
               {/* Sub-navigation for Supply */}
-              <div className="flex items-center gap-1 bg-white dark:bg-[#1A1C19] p-1 rounded-2xl border border-slate-200 dark:border-slate-800 w-fit">
-                <button
-                  onClick={() => setSupplySection("files")}
-                  className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${
-                    supplySection === "files" 
-                      ? "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white" 
-                      : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-                  }`}
-                >
-                  Файлы
-                </button>
-                <button
-                  onClick={() => setSupplySection("calc")}
-                  className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${
-                    supplySection === "calc" 
-                      ? "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white" 
-                      : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-                  }`}
-                >
-                  Расчет потребности
-                </button>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-1 bg-white dark:bg-[#1A1C19] p-1 rounded-2xl border border-slate-200 dark:border-slate-800 w-fit">
+                  <button
+                    onClick={() => setSupplySection("files")}
+                    className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                      supplySection === "files" 
+                        ? "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white" 
+                        : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                    }`}
+                  >
+                    Файлы
+                  </button>
+                  <button
+                    onClick={() => setSupplySection("calc")}
+                    className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                      supplySection === "calc" 
+                        ? "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white" 
+                        : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                    }`}
+                  >
+                    Расчет потребности
+                  </button>
+                </div>
+                
+                {supplySection === "calc" && calculationResults.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        const headers = ["Марка заг.", "Размер мм. (Заг.)", "Длина мм.", "Кол-во тн заг.", "Кол-во шт"];
+                        if (!isPurchasingMode) headers.push("Сумма (руб)");
+
+                        const rows = Object.entries<{weight: number, count: number, cost: number}>(
+                          calculationResults.reduce((acc, curr) => {
+                            const label = curr.lengthType === "НД" ? "НД" : `МД ${curr.billetLength}`;
+                            const key = `${curr.grade} | ${curr.billetDia} | ${label}`;
+                            if (!acc[key]) acc[key] = { weight: 0, count: 0, cost: 0 };
+                            acc[key].weight += curr.totalWeight;
+                            acc[key].count += curr.billetCount || 0;
+                            acc[key].cost += curr.totalCost || 0;
+                            return acc;
+                          }, {} as Record<string, {weight: number, count: number, cost: number}>)
+                        )
+                        .sort((a, b) => b[1].weight - a[1].weight)
+                        .map(([key, data]) => {
+                          const [grade, size, length] = key.split(' | ');
+                          const row = [
+                            grade,
+                            String(size).replace(".", ","),
+                            length,
+                            String(data.weight.toFixed(3)).replace(".", ","),
+                            String(data.count)
+                          ];
+                          if (!isPurchasingMode) row.push(String(Math.round(data.cost)).replace(".", ","));
+                          return row;
+                        });
+
+                        const tsv = [headers, ...rows].map(row => row.join("\t")).join("\n");
+                        navigator.clipboard.writeText(tsv);
+                        setCopySuccess(true);
+                        setTimeout(() => setCopySuccess(false), 2000);
+                      }}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm ${
+                        copySuccess 
+                          ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" 
+                          : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-50"
+                      }`}
+                      title="Скопировать заявку для вставки (Ctrl+V) в Google Таблицы"
+                    >
+                      {copySuccess ? (
+                        <>
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                          Скопировано!
+                        </>
+                      ) : (
+                        <>
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                          Копировать заявку
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        const headers = ["Марка заг.", "Размер мм. (Заг.)", "Длина мм.", "Кол-во тн заг.", "Кол-во шт"];
+                        if (!isPurchasingMode) headers.push("Сумма (руб)");
+
+                        const rows = Object.entries<{weight: number, count: number, cost: number}>(
+                          calculationResults.reduce((acc, curr) => {
+                            const label = curr.lengthType === "НД" ? "НД" : `МД ${curr.billetLength}`;
+                            const key = `${curr.grade} | ${curr.billetDia} | ${label}`;
+                            if (!acc[key]) acc[key] = { weight: 0, count: 0, cost: 0 };
+                            acc[key].weight += curr.totalWeight;
+                            acc[key].count += curr.billetCount || 0;
+                            acc[key].cost += curr.totalCost || 0;
+                            return acc;
+                          }, {} as Record<string, {weight: number, count: number, cost: number}>)
+                        )
+                        .sort((a, b) => b[1].weight - a[1].weight)
+                        .map(([key, data]) => {
+                          const [grade, size, length] = key.split(' | ');
+                          const row = [
+                            grade,
+                            String(size).replace(".", ","),
+                            length,
+                            String(data.weight.toFixed(3)).replace(".", ","),
+                            String(data.count)
+                          ];
+                          if (!isPurchasingMode) row.push(String(Math.round(data.cost)).replace(".", ","));
+                          return row;
+                        });
+
+                        const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+                        const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
+                        
+                        for (let R = range.s.r; R <= range.e.r; ++R) {
+                          for (let C = range.s.c; C <= range.e.c; ++C) {
+                            const cell_address = { c: C, r: R };
+                            const cell_ref = XLSX.utils.encode_cell(cell_address);
+                            if (!worksheet[cell_ref]) continue;
+
+                            worksheet[cell_ref].s = {
+                              font: { sz: 8 },
+                              alignment: { 
+                                horizontal: "center", 
+                                vertical: "center"
+                              }
+                            };
+                            
+                            if (R === 0) {
+                              worksheet[cell_ref].s.font.bold = true;
+                            }
+                          }
+                        }
+
+                        worksheet["!views"] = [{ state: "frozen", ySplit: 1 }];
+                        const out_wcut = [
+                            { wch: 20 }, { wch: 20 }, { wch: 15 }, { wch: 20 }, { wch: 15 }, { wch: 15 }
+                        ];
+                        worksheet["!cols"] = out_wcut;
+                        
+                        const workbook = XLSX.utils.book_new();
+                        XLSX.utils.book_append_sheet(workbook, worksheet, "Заявка");
+                        XLSX.writeFile(workbook, "Заявка_на_сырье.xlsx");
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition-colors shadow-sm"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                      Скачать заявку 
+                    </button>
+                  </div>
+                )}
               </div>
 
               <AnimatePresence mode="wait">
@@ -1098,7 +1228,7 @@ export function AdminPanel({
                       </div>
                     ) : (
                       <div className="flex flex-col gap-6">
-                        <div className={`grid grid-cols-1 ${!isPurchasingMode ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-6`}>
+                        <div className={`grid grid-cols-1 ${!isPurchasingMode ? 'lg:grid-cols-3' : 'lg:grid-cols-2'} gap-6`}>
                           {!isPurchasingMode && (
                             <div className="bg-violet-50 dark:bg-violet-900/10 border border-violet-100 dark:border-violet-900/30 p-6 rounded-[24px] flex flex-col justify-center">
                               <span className="text-[10px] font-bold text-violet-600 dark:text-violet-500 uppercase tracking-widest">Общая стоимость (без НДС)</span>
@@ -1137,155 +1267,190 @@ export function AdminPanel({
                               </div>
                             </div>
                           )}
-                          <div className="bg-sky-50 dark:bg-sky-900/10 border border-sky-100 dark:border-sky-900/30 p-6 rounded-[24px]">
-                            <span className="text-[10px] font-bold text-sky-600 dark:text-sky-500 uppercase tracking-widest">Итого заготовка (тн)</span>
-                            <div className="flex items-baseline gap-2 mt-1">
-                              <div className="text-3xl font-black text-sky-600 dark:text-sky-400">
-                                {calculationResults.reduce((acc, curr) => acc + curr.totalWeight, 0).toFixed(3)}
+                          <div className="bg-white dark:bg-[#1A1C19] border border-slate-200 dark:border-slate-800 p-6 rounded-[24px] flex flex-col relative shadow-sm transition-all hover:shadow-md">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-sky-500/5 dark:bg-sky-500/10 rounded-bl-[64px] rounded-tr-[24px] pointer-events-none"></div>
+                            <div className="z-10 flex items-start justify-between">
+                              <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <div className="w-2 h-2 rounded-full bg-sky-500"></div>
+                                  <h3 className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Итого заготовка</h3>
+                                </div>
+                                <div className="flex items-baseline gap-1">
+                                  <span className="text-4xl font-black text-slate-900 dark:text-white tracking-tight leading-none h-[40px] flex items-baseline">
+                                    {calculationResults.reduce((acc, curr) => acc + curr.totalWeight, 0).toFixed(3)}
+                                  </span>
+                                  <span className="text-sm font-bold text-slate-400">тн</span>
+                                </div>
                               </div>
-                              <span className="text-lg font-normal text-sky-600/70">тн</span>
+                              <button
+                                onClick={() => {
+                                  const headers = ["Марка заг.", "Размер мм.", "Длина", "Кол-во тн", "Кол-во шт"];
+                                  if (!isPurchasingMode) headers.push("Сумма (руб)");
+
+                                  const rows = Object.entries<{weight: number, count: number, cost: number}>(
+                                    calculationResults.reduce((acc, curr) => {
+                                      const label = curr.lengthType === "НД" ? "НД" : `МД ${curr.billetLength}`;
+                                      const key = `${curr.grade} | ${curr.billetDia} | ${label}`;
+                                      if (!acc[key]) acc[key] = { weight: 0, count: 0, cost: 0 };
+                                      acc[key].weight += curr.totalWeight;
+                                      acc[key].count += curr.billetCount || 0;
+                                      acc[key].cost += curr.totalCost || 0;
+                                      return acc;
+                                    }, {} as Record<string, {weight: number, count: number, cost: number}>)
+                                  )
+                                  .sort((a, b) => b[1].weight - a[1].weight)
+                                  .map(([key, data]) => {
+                                    const [grade, size, length] = key.split(' | ');
+                                    const row = [
+                                      grade,
+                                      String(size).replace(".", ","),
+                                      length,
+                                      String(data.weight.toFixed(3)).replace(".", ","),
+                                      String(data.count)
+                                    ];
+                                    if (!isPurchasingMode) row.push(String(Math.round(data.cost)).replace(".", ","));
+                                    return row;
+                                  });
+
+                                  const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+                                  const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
+                                  
+                                  for (let R = range.s.r; R <= range.e.r; ++R) {
+                                    for (let C = range.s.c; C <= range.e.c; ++C) {
+                                      const cell_address = { c: C, r: R };
+                                      const cell_ref = XLSX.utils.encode_cell(cell_address);
+                                      if (!worksheet[cell_ref]) continue;
+
+                                      worksheet[cell_ref].s = {
+                                        font: { sz: 8 },
+                                        alignment: { 
+                                          horizontal: "center", 
+                                          vertical: "center"
+                                        }
+                                      };
+                                      
+                                      if (R === 0) {
+                                        worksheet[cell_ref].s.font.bold = true;
+                                      }
+                                    }
+                                  }
+
+                                  worksheet["!views"] = [{ state: "frozen", ySplit: 1 }];
+                                  const out_wcut = [
+                                      { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }
+                                  ];
+                                  worksheet["!cols"] = out_wcut;
+                                  
+                                  const workbook = XLSX.utils.book_new();
+                                  XLSX.utils.book_append_sheet(workbook, worksheet, "Итого заготовка");
+                                  XLSX.writeFile(workbook, "Сводка_заготовка.xlsx");
+                                }}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-50 dark:bg-sky-500/10 hover:bg-sky-100 dark:hover:bg-sky-500/20 text-sky-600 dark:text-sky-400 rounded-lg text-xs font-bold transition-colors border border-sky-200 dark:border-sky-500/20 shadow-sm"
+                                title="Скачать сводку по заготовке в Excel"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                                Скачать
+                              </button>
                             </div>
-                            
-                            <div className="mt-4 pt-4 border-t border-sky-100 dark:border-sky-900/30">
-                              <div className="space-y-2 max-h-[160px] overflow-y-auto pr-2 custom-scrollbar">
-                                {Object.entries<{weight: number, cost: number}>(
+
+                            <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800/60 flex-1 z-10 flex flex-col min-h-0">
+                              <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1 transition-all custom-scrollbar flex-1">
+                                {Object.entries<{weight: number, count: number, cost: number}>(
                                   calculationResults.reduce((acc, curr) => {
                                     const label = curr.lengthType === "НД" ? "НД" : `МД ${curr.billetLength}`;
-                                    const key = `${curr.grade} | ${label}`;
-                                    if (!acc[key]) acc[key] = { weight: 0, cost: 0 };
+                                    const key = `${curr.grade} | ${curr.billetDia} | ${label}`;
+                                    if (!acc[key]) acc[key] = { weight: 0, count: 0, cost: 0 };
                                     acc[key].weight += curr.totalWeight;
+                                    acc[key].count += curr.billetCount || 0;
                                     acc[key].cost += curr.totalCost || 0;
                                     return acc;
-                                  }, {} as Record<string, {weight: number, cost: number}>)
+                                  }, {} as Record<string, {weight: number, count: number, cost: number}>)
                                 )
                                   .sort((a, b) => b[1].weight - a[1].weight)
-                                  .map(([key, data]) => (
-                                    <div key={key} className="flex justify-between items-center text-[11px] bg-white/60 dark:bg-sky-950/40 p-2.5 rounded-xl border border-sky-100/50 dark:border-sky-900/20 shadow-sm">
-                                      <div className="flex flex-col">
-                                        <span className="text-slate-500 dark:text-slate-400 font-bold text-[9px] uppercase tracking-wider">{key}</span>
-                                        <span className="text-sky-600 dark:text-sky-400 font-black">{data.weight.toFixed(3)} тн</span>
-                                      </div>
-                                      {!isPurchasingMode && (
-                                        <div className="text-right flex flex-col">
-                                          <span className="text-slate-400 dark:text-slate-500 font-bold text-[9px] uppercase tracking-wider">Без НДС</span>
-                                          <span className="text-violet-600 dark:text-violet-400 font-bold">{Math.round(data.cost).toLocaleString()} ₽</span>
-                                        </div>
-                                      )}
-                                    </div>
-                                  ))}
-                              </div>
-
-                            </div>
-                          </div>
-
-                          <div className="bg-violet-50 dark:bg-violet-900/10 border border-violet-100 dark:border-violet-900/30 p-6 rounded-[24px]">
-                            <span className="text-[10px] font-bold text-violet-600 dark:text-violet-500 uppercase tracking-widest">Стоимость по маркам</span>
-                            <div className="mt-4 pt-4 border-t border-violet-100 dark:border-violet-900/30">
-                              <div className="space-y-2 max-h-[220px] overflow-y-auto pr-2 custom-scrollbar">
-                                {Object.entries<{weight: number, cost: number, price: number}>(
-                                  calculationResults.reduce((acc, curr) => {
-                                    const key = `${curr.grade} (${curr.lengthType})`;
-                                    if (!acc[key]) acc[key] = { weight: 0, cost: 0, price: curr.price };
-                                    acc[key].weight += curr.totalWeight;
-                                    acc[key].cost += curr.totalCost || 0;
-                                    return acc;
-                                  }, {} as Record<string, {weight: number, cost: number, price: number}>)
-                                )
-                                  .sort((a, b) => b[1].cost - a[1].cost)
                                   .map(([key, data]) => {
+                                    const [grade, size, length] = key.split(' | ');
                                     return (
-                                      <div key={key} className="flex justify-between items-center text-[11px] bg-white/60 dark:bg-violet-950/40 p-2.5 rounded-xl border border-violet-100/50 dark:border-violet-900/20 shadow-sm transition-all hover:shadow-md">
-                                        <div className="flex flex-col gap-1">
-                                          <span className="text-slate-500 dark:text-slate-400 font-bold text-[9px] uppercase tracking-wider">{key}</span>
-                                          <div className="flex items-center gap-2">
-                                            <span className="text-violet-600 dark:text-violet-400 font-black">{data.weight.toFixed(3)} тн</span>
-                                          </div>
+                                      <div key={key} className="flex justify-between items-center group bg-slate-50 dark:bg-slate-800/30 hover:bg-sky-50 dark:hover:bg-slate-800 border border-slate-100 dark:border-slate-800/50 px-2 py-1.5 rounded-lg transition-colors">
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="text-slate-700 dark:text-slate-300 font-bold text-[10px] min-w-[32px]">{grade}</span>
+                                          <span className="text-slate-500 dark:text-slate-400 font-semibold text-[9px] min-w-[20px]">Ø{size}</span>
+                                          <span className="text-[8px] text-sky-600 dark:text-sky-400 bg-sky-100 dark:bg-sky-900/30 px-1 py-0.5 rounded font-bold uppercase">{length}</span>
                                         </div>
-                                        {!isPurchasingMode && (
-                                          <div className="text-right flex flex-col gap-0.5">
-                                            <span className="text-violet-600 dark:text-violet-400 font-black">{Math.round(data.cost).toLocaleString()} ₽</span>
-                                            <span className="text-[8.5px] text-violet-500/80 font-bold tracking-widest text-right uppercase">Цена: {Math.round(data.price).toLocaleString()} ₽ без НДС</span>
+                                        <div className="flex flex-col items-end leading-none gap-0.5">
+                                          <div className="flex items-baseline gap-1.5">
+                                            <span className="text-sky-700 dark:text-sky-400 font-black text-[10px]">{data.weight.toFixed(3)} <span className="font-medium text-[8px] text-sky-600/60 uppercase">тн</span></span>
                                           </div>
-                                        )}
+                                          {!isPurchasingMode && <span className="text-[7.5px] text-slate-400 font-medium uppercase">{Math.round(data.cost).toLocaleString()} ₽</span>}
+                                        </div>
                                       </div>
-                                    );
+                                    )
                                   })}
-                                {!isPurchasingMode && (
-                                  <div className="flex justify-between items-center pt-3 border-t border-violet-100 dark:border-violet-900/20 mt-2 px-1">
-                                    <div className="flex flex-col">
-                                      <span className="text-violet-600 dark:text-violet-400 font-black uppercase text-[10px]">Итого</span>
-                                      <span className="text-[8px] text-violet-400/60 font-bold uppercase">Без НДС</span>
-                                    </div>
-                                    <span className="text-violet-700 dark:text-violet-400 font-black text-xl">
-                                      {Math.round(calculationResults.reduce((acc, curr) => acc + (curr.totalCost || 0), 0)).toLocaleString()} <span className="text-sm font-normal">₽</span>
-                                    </span>
-                                  </div>
-                                )}
                               </div>
                             </div>
                           </div>
 
-                          <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/30 p-6 rounded-[24px]">
-                            <div className="flex items-center gap-2">
-                              <span className="text-[10px] font-bold text-amber-600 dark:text-amber-500 uppercase tracking-widest">Коэф. использования (КИМ)</span>
-                              <div className="group relative">
-                                <Info className="w-3.5 h-3.5 text-amber-400 cursor-help" />
-                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-slate-900 dark:bg-slate-800 text-white text-[11px] rounded-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity shadow-xl z-50">
-                                  <div className="font-bold mb-1">Коэффициент Использования Металла (КИМ)</div>
-                                  Показывает, какая часть заготовки идет в готовую продукцию. Остальное распределяется между технологическим ломом и деловым остатком.
-                                  <div className="absolute top-full left-1/2 -translate-x-1/2 border-[6px] border-transparent border-t-slate-900 dark:border-t-slate-800"></div>
+                          <div className="bg-white dark:bg-[#1A1C19] border border-slate-200 dark:border-slate-800 p-6 rounded-[24px] flex flex-col relative shadow-sm transition-all hover:shadow-md">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 dark:bg-amber-500/10 rounded-bl-[64px] rounded-tr-[24px] pointer-events-none"></div>
+                            <div className="z-10">
+                              <div className="flex items-center justify-between mb-1">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-2 h-2 rounded-full bg-amber-500"></div>
+                                  <h3 className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                                    Коэф. Использования (КИМ)
+                                    <div className="group relative z-[100]">
+                                      <Info className="w-3.5 h-3.5 text-amber-500/70 hover:text-amber-500 cursor-help transition-colors" />
+                                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-2.5 bg-slate-900 dark:bg-slate-800 border border-slate-700 text-white text-[10.5px] rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-200 translate-y-1 group-hover:translate-y-0 shadow-xl normal-case tracking-normal">
+                                        Показывает, какая часть заготовки идет в продукцию. Чем ближе к 1.0, тем лучше.
+                                        <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-900 dark:bg-slate-800 border-b border-r border-slate-700 rotate-45"></div>
+                                      </div>
+                                    </div>
+                                  </h3>
+                                </div>
+                                <div className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/10 px-1.5 py-0.5 rounded-md">
+                                  Цель ≥ 0.980
                                 </div>
                               </div>
-                            </div>
-                            <div className="flex items-baseline justify-between mt-1">
                               <div className="flex items-baseline gap-2">
-                                <div className="text-3xl font-black text-amber-600 dark:text-amber-400">
-                                  {(calculationResults.reduce((acc, curr) => acc + curr.remainingToProcess, 0) / calculationResults.reduce((acc, curr) => acc + curr.totalWeight, 0)).toFixed(3)}
-                                </div>
-                                <span className="text-sm font-bold text-amber-600/60 italic">средний</span>
-                              </div>
-                              <div className="flex flex-col items-end">
-                                <span className="text-[9px] font-bold text-amber-500/50 uppercase">Целевой показатель</span>
-                                <span className="text-xs font-black text-emerald-600 dark:text-emerald-400">≥ 0.980</span>
+                                <span className="text-4xl font-black text-slate-900 dark:text-white tracking-tight leading-none h-[40px] flex items-baseline">
+                                  {(calculationResults.reduce((acc, curr) => acc + curr.remainingToProcess, 0) / (calculationResults.reduce((acc, curr) => acc + curr.totalWeight, 0) || 1)).toFixed(3)}
+                                </span>
+                                <span className="text-sm font-bold text-amber-500/80">средний</span>
                               </div>
                             </div>
 
-                            <div className="mt-4 pt-4 border-t border-amber-100 dark:border-amber-900/30">
-                              <div className="grid grid-cols-1 gap-2">
-                                <div className="flex justify-between items-center text-[11px] bg-white/60 dark:bg-amber-900/10 p-2.5 rounded-xl border border-amber-100/50 dark:border-amber-900/20">
+                            <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800/60 flex-1 z-10 flex flex-col justify-end">
+                              <div className="space-y-2">
+                                <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-800/30 border border-slate-100 dark:border-slate-800/50 p-3 rounded-xl transition-colors hover:bg-amber-50 dark:hover:bg-slate-800">
                                   <div className="flex flex-col">
-                                    <span className="text-amber-700/60 dark:text-amber-500/60 font-bold text-[9px] uppercase tracking-wider">Лом (тех-отходы)</span>
-                                    <span className="text-amber-700 dark:text-amber-500 font-black">
-                                      {calculationResults.reduce((acc, curr) => acc + (curr.techEnds / curr.drawLength) * curr.totalWeight, 0).toFixed(3)} тн
+                                    <span className="text-slate-500 dark:text-slate-400 font-bold text-[9px] uppercase tracking-wider mb-0.5">Лом (Тех. отходы)</span>
+                                    <span className="text-amber-600 dark:text-amber-500 font-black text-[13px]">
+                                      {calculationResults.reduce((acc, curr) => acc + (curr.drawLength > 0 ? (curr.techEnds / curr.drawLength) * curr.totalWeight : 0), 0).toFixed(3)} <span className="font-medium text-[9px] text-amber-600/60 uppercase">тн</span>
                                     </span>
                                   </div>
-                                  <div className="text-right flex flex-col">
-                                    <span className="text-amber-700/60 dark:text-amber-500/60 font-bold text-[9px] uppercase tracking-wider">Доля</span>
-                                    <span className="text-amber-600 font-bold">
-                                      {((calculationResults.reduce((acc, curr) => acc + (curr.techEnds / curr.drawLength) * curr.totalWeight, 0) / calculationResults.reduce((acc, curr) => acc + curr.totalWeight, 0)) * 100).toFixed(1)}%
+                                  <div className="flex flex-col items-end">
+                                    <span className="text-slate-400 font-medium text-[9px] uppercase tracking-widest mb-0.5">Доля</span>
+                                    <span className="text-slate-700 dark:text-slate-200 font-bold text-[13px]">
+                                      {((calculationResults.reduce((acc, curr) => acc + (curr.drawLength > 0 ? (curr.techEnds / curr.drawLength) * curr.totalWeight : 0), 0) / (calculationResults.reduce((acc, curr) => acc + curr.totalWeight, 0) || 1)) * 100).toFixed(1)}%
                                     </span>
                                   </div>
                                 </div>
-                                <div className="flex justify-between items-center text-[11px] bg-white/60 dark:bg-amber-900/10 p-2.5 rounded-xl border border-amber-100/50 dark:border-amber-900/20">
+                                
+                                <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-800/30 border border-slate-100 dark:border-slate-800/50 p-3 rounded-xl transition-colors hover:bg-amber-50 dark:hover:bg-slate-800">
                                   <div className="flex flex-col">
-                                    <span className="text-amber-700/60 dark:text-amber-500/60 font-bold text-[9px] uppercase tracking-wider">Деловой остаток</span>
-                                    <span className="text-amber-700 dark:text-amber-500 font-black">
+                                    <span className="text-slate-500 dark:text-slate-400 font-bold text-[9px] uppercase tracking-wider mb-0.5">Деловой остаток</span>
+                                    <span className="text-amber-600 dark:text-amber-500 font-black text-[13px]">
                                       {calculationResults.reduce((acc, curr) => {
-                                        const leftovers = curr.lengthType === "НД" 
-                                          ? 0 
-                                          : (curr.usefulLength - (curr.pcsPerBillet * curr.length));
-                                        return acc + (leftovers / curr.drawLength) * curr.totalWeight;
-                                      }, 0).toFixed(3)} тн
+                                        const leftovers = curr.lengthType === "НД" ? 0 : (curr.usefulLength - (curr.pcsPerBillet * curr.length));
+                                        return acc + (curr.drawLength > 0 ? (leftovers / curr.drawLength) * curr.totalWeight : 0);
+                                      }, 0).toFixed(3)} <span className="font-medium text-[9px] text-amber-600/60 uppercase">тн</span>
                                     </span>
                                   </div>
-                                  <div className="text-right flex flex-col">
-                                    <span className="text-amber-700/60 dark:text-amber-500/60 font-bold text-[9px] uppercase tracking-wider">Доля</span>
-                                    <span className="text-amber-600 font-bold">
+                                  <div className="flex flex-col items-end">
+                                    <span className="text-slate-400 font-medium text-[9px] uppercase tracking-widest mb-0.5">Доля</span>
+                                    <span className="text-slate-700 dark:text-slate-200 font-bold text-[13px]">
                                       {((calculationResults.reduce((acc, curr) => {
-                                        const leftovers = curr.lengthType === "НД" 
-                                          ? 0 
-                                          : (curr.usefulLength - (curr.pcsPerBillet * curr.length));
-                                        return acc + (leftovers / curr.drawLength) * curr.totalWeight;
+                                        const leftovers = curr.lengthType === "НД" ? 0 : (curr.usefulLength - (curr.pcsPerBillet * curr.length));
+                                        return acc + (curr.drawLength > 0 ? (leftovers / curr.drawLength) * curr.totalWeight : 0);
                                       }, 0) / (calculationResults.reduce((acc, curr) => acc + curr.totalWeight, 0) || 1)) * 100).toFixed(1)}%
                                     </span>
                                   </div>
@@ -1468,11 +1633,11 @@ export function AdminPanel({
                             onMouseLeave={handleMouseLeaveOrUp}
                             onMouseUp={handleMouseLeaveOrUp}
                             onMouseMove={handleMouseMove}
-                            className={`overflow-x-auto ${isDragging ? 'select-none cursor-grabbing' : 'cursor-grab'}`}
+                            className={`overflow-auto max-h-[60vh] custom-scrollbar relative ${isDragging ? 'select-none cursor-grabbing' : 'cursor-grab'}`}
                           >
                             <table className="w-full border-collapse pointer-events-auto">
-                              <thead>
-                                <tr className="bg-slate-50/30 dark:bg-slate-800/10 border-b border-slate-100 dark:border-slate-800">
+                              <thead className="sticky top-0 z-20">
+                                <tr className="bg-slate-50/95 dark:bg-[#1A1C19]/95 backdrop-blur-sm shadow-[0_1px_0_rgba(241,245,249,1)] dark:shadow-[0_1px_0_rgba(30,41,59,1)]">
                                   <th className="px-5 py-4 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest w-20">Внутренняя нумерация</th>
                                   <th className="px-5 py-4 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest w-16">Дата отгрузки</th>
                                   <th className="px-5 py-4 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">№ Заказа</th>
@@ -1491,7 +1656,18 @@ export function AdminPanel({
                                   <th className="px-5 py-4 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Длина мм.</th>
                                   <th className="px-5 py-4 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap text-amber-500/80">Тех. Отходы</th>
                                   <th className="px-5 py-4 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap text-amber-500/80">Делов. Остаток</th>
-                                  <th className="px-5 py-4 text-center text-[10px] font-bold text-amber-500 uppercase tracking-widest whitespace-nowrap">КИМ / Совет</th>
+                                  <th className="px-5 py-4 text-center text-[10px] font-bold text-amber-500 uppercase tracking-widest whitespace-nowrap">
+                                    <div className="flex items-center justify-center gap-1.5">
+                                      КИМ / Совет
+                                      <div className="group relative z-[100]">
+                                        <Info className="w-3.5 h-3.5 text-amber-500/70 hover:text-amber-500 cursor-help transition-colors" />
+                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-2.5 bg-slate-900 dark:bg-slate-800 border border-slate-700 text-white text-[10.5px] rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-200 translate-y-1 group-hover:translate-y-0 shadow-xl normal-case tracking-normal whitespace-normal">
+                                          Показывает, какая часть заготовки идет в продукцию. Чем ближе к 1.0, тем лучше.
+                                          <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-900 dark:bg-slate-800 border-b border-r border-slate-700 rotate-45"></div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </th>
                                   {!isPurchasingMode && (
                                     <>
                                       <th className="px-5 py-4 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Цена за 1т</th>
