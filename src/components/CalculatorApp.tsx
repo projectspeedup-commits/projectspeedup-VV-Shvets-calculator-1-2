@@ -308,6 +308,10 @@ export function CalculatorApp({
       }
     }
     
+    // If drawing dimensions are not fully set, we cannot calculate
+    // the required weight accurately. Don't default to 1:1.
+    if (!displayedTargetLength || piecesPerBar === 0) return null;
+
     return baseWeight.toFixed(3);
   }, [orderWeight, piecesPerBar, orderedLength, displayedTargetLength]);
 
@@ -315,7 +319,7 @@ export function CalculatorApp({
     if (requiredWeight && orderWeight && Number(orderWeight) > 0) {
       return Number(requiredWeight) / Number(orderWeight);
     }
-    return currentCoefficient || 1;
+    return currentCoefficient || null;
   }, [requiredWeight, orderWeight, currentCoefficient]);
 
   const orderedBarWeight = useMemo(() => {
