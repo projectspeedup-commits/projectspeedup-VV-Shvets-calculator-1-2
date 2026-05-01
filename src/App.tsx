@@ -140,18 +140,26 @@ export default function App() {
                if (typeof window !== "undefined") window.localStorage.setItem("arsenal_economy_items", JSON.stringify(merged));
             }
 
-            if (data.rawPrices) {
+            if (data.rawPrices || data.rawPricesV2) {
               const loadedPrices = { ...DEFAULT_RAW_PRICES };
               const allG = [...Object.keys(DEFAULT_RAW_PRICES), ...currentCustomGrades];
               allG.forEach((grade) => {
                 const dbKey = sanitizeKey(grade);
-                if (data.rawPrices[dbKey] !== undefined) {
-                  const val = data.rawPrices[dbKey];
-                  if (typeof val === 'string') {
-                    loadedPrices[grade] = { md: val, nd: val };
+                const valObj = data.rawPricesV2 ? data.rawPricesV2[dbKey] : undefined;
+                const valString = data.rawPrices ? data.rawPrices[dbKey] : undefined;
+
+                if (valObj && valObj.md !== undefined) {
+                  // If Old app mutated string price to be different from what we saved initially, fallback to string format string price
+                  if (typeof valString === 'string' && valString !== valObj.md && valString !== valObj.nd) {
+                    loadedPrices[grade] = { md: valString, nd: valString };
                   } else {
-                    loadedPrices[grade] = val;
+                    loadedPrices[grade] = valObj;
                   }
+                } else if (typeof valString === 'string') {
+                  loadedPrices[grade] = { md: valString, nd: valString };
+                } else if (valString && typeof valString === 'object') {
+                  // Fallback in case rawPrices actually contains objects from intermediate versions
+                  loadedPrices[grade] = valString;
                 }
               });
               setGlobalRawPrices(loadedPrices);
@@ -204,12 +212,19 @@ export default function App() {
     } catch (e) {}
 
     if (db && isCloudActive) {
-      const firestoreRawPrices: Record<string, { md: string; nd: string }> = {};
+      const firestoreRawPricesV2: Record<string, { md: string; nd: string }> = {};
+      const firestoreRawPricesOld: Record<string, string> = {};
+      
       for (const [k, v] of Object.entries(rawPricesObj)) {
-        firestoreRawPrices[sanitizeKey(k)] = v;
+        const sanitized = sanitizeKey(k);
+        firestoreRawPricesV2[sanitized] = v;
+        // Old versions expect a string for price. 'nd' is usually priority, then 'md'
+        firestoreRawPricesOld[sanitized] = v.nd || v.md || "0";
       }
+
       const payload: any = {
-        rawPrices: firestoreRawPrices,
+        rawPrices: firestoreRawPricesOld,
+        rawPricesV2: firestoreRawPricesV2,
         scrapPrice: scrapStr,
         remnantPrice: remnantStr,
         updatedAt: new Date().toISOString()

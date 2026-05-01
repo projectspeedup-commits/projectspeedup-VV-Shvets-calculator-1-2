@@ -522,6 +522,23 @@ export function AdminPanel({
     setStockFiles(prev => prev.filter(f => f.id !== id));
   };
 
+  useEffect(() => {
+    setRawPrices(prev => JSON.stringify(prev) === JSON.stringify(initialRawPrices) ? prev : initialRawPrices);
+    setScrap(prev => prev === initialScrap ? prev : initialScrap);
+    setRemnant(prev => prev === initialRemnant ? prev : initialRemnant);
+    setCustomGrades(prev => JSON.stringify(prev) === JSON.stringify(initialCustomGrades || []) ? prev : (initialCustomGrades || []));
+    setRemnantPricing(prev => JSON.stringify(prev) === JSON.stringify(initialRemnantPricing || {}) ? prev : (initialRemnantPricing || {}));
+    
+    if (initialEconomyItems && initialEconomyItems.length > 0) {
+      setEconomyItems(prev => {
+        const initialMap = new Map(initialEconomyItems.map(item => [item.id, item]));
+        const merged = DEFAULT_ECONOMY_ITEMS.map(defaultItem => initialMap.get(defaultItem.id) || defaultItem);
+        if (JSON.stringify(prev) === JSON.stringify(merged)) return prev;
+        return merged;
+      });
+    }
+  }, [initialRawPrices, initialScrap, initialRemnant, initialCustomGrades, initialRemnantPricing, initialEconomyItems]);
+
   const allGrades = [...DEFAULT_STEEL_GRADES, ...customGrades];
 
   const RemnantPricingTooltip = () => (
