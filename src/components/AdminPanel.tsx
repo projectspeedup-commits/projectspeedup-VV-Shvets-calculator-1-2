@@ -138,15 +138,6 @@ export function AdminPanel({
     tableContainerRef.current.scrollLeft = scrollLeftState - walk;
   };
 
-  useEffect(() => {
-    if (initialRawPrices) setRawPrices(initialRawPrices);
-    if (initialScrapPrice) setScrap(initialScrapPrice);
-    if (initialRemnantPrice) setRemnant(initialRemnantPrice);
-    if (initialCustomGrades) setCustomGrades(initialCustomGrades);
-    if (initialRemnantPricing) setRemnantPricing(initialRemnantPricing);
-    if (initialEconomyItems) setEconomyItems(initialEconomyItems);
-  }, [initialRawPrices, initialScrapPrice, initialRemnantPrice, initialCustomGrades, initialRemnantPricing, initialEconomyItems]);
-
   // Synchronize prices in calculation results when rawPrices changes
   useEffect(() => {
     if (calculationResults.length === 0) return;
@@ -530,19 +521,6 @@ export function AdminPanel({
   const removeStockFile = (id: string) => {
     setStockFiles(prev => prev.filter(f => f.id !== id));
   };
-
-  useEffect(() => {
-    setRawPrices(initialRawPrices);
-    setScrap(initialScrap);
-    setRemnant(initialRemnant);
-    setCustomGrades(initialCustomGrades || []);
-    setRemnantPricing(initialRemnantPricing || {});
-    if (initialEconomyItems && initialEconomyItems.length > 0) {
-      const initialMap = new Map(initialEconomyItems.map(item => [item.id, item]));
-      const merged = DEFAULT_ECONOMY_ITEMS.map(defaultItem => initialMap.get(defaultItem.id) || defaultItem);
-      setEconomyItems(merged);
-    }
-  }, [initialRawPrices, initialScrap, initialRemnant, initialCustomGrades, initialRemnantPricing, initialEconomyItems]);
 
   const allGrades = [...DEFAULT_STEEL_GRADES, ...customGrades];
 

@@ -117,7 +117,6 @@ export default function App() {
       const pricesDocRef = doc(db, "settings", "prices");
       const unsubscribe = onSnapshot(
         pricesDocRef,
-        { includeMetadataChanges: true },
         (docSnap) => {
           if (docSnap.exists()) {
             const data = docSnap.data();
