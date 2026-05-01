@@ -89,17 +89,17 @@ export const getGostForGrade = (grade: string) => {
   if (!grade) return "";
   const g = grade.toUpperCase().trim();
   if (g.includes("09Г2С")) return "ГОСТ 19281-2014";
-  if (g === "20" || g === "СТ20" || g === "СТ.20") return "ГОСТ 1050-75";
-  if (g === "35" || g === "СТ35" || g === "СТ.35") return "ГОСТ 1050-74";
-  if (g === "45" || g === "СТ45" || g === "СТ.45") return "ГОСТ 1050-74";
+  if (g === "20" || g === "СТ20" || g === "СТ.20") return "ГОСТ 1050-2013";
+  if (g === "35" || g === "СТ35" || g === "СТ.35") return "ГОСТ 1050-2013";
+  if (g === "45" || g === "СТ45" || g === "СТ.45") return "ГОСТ 1050-2013";
   
   if (g.includes("10") || g.includes("20") || g.includes("35") || g.includes("40") || g.includes("45")) {
-    if (g.includes("Х") || g.includes("Г")) return "ГОСТ 4543";
+    if (g.includes("Х") || g.includes("Г") || g.includes("Н")) return "ГОСТ 4543-2016";
     return "ГОСТ 1050-2013";
   }
-  if (g.includes("20Х") || g.includes("30Х") || g.includes("40Х") || g.includes("18ХГТ") || g.includes("25ХГТ") || g.includes("30ХГСА")) return "ГОСТ 4543";
-  if (g.includes("А12")) return "ГОСТ 1414";
-  return "ГОСТ 1050"; 
+  if (g.includes("20Х") || g.includes("30Х") || g.includes("40Х") || g.includes("18ХГТ") || g.includes("25ХГТ") || g.includes("30ХГСА") || g.includes("20ХН3А") || g.includes("12ХН3А")) return "ГОСТ 4543-2016";
+  if (g.includes("А12")) return "ГОСТ 1414-75";
+  return "ГОСТ 1050-2013"; 
 };
 
 export const getProfileGost = (type: "round" | "hex") => {

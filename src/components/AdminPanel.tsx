@@ -1,4 +1,4 @@
-import { DEFAULT_STEEL_GRADES, formatInputValue, handleNumericInput, DEFAULT_ECONOMY_ITEMS, EconomyItem, ROUND_DATA, HEX_DATA } from "../lib/constants";
+import { DEFAULT_STEEL_GRADES, formatInputValue, handleNumericInput, DEFAULT_ECONOMY_ITEMS, EconomyItem, ROUND_DATA, HEX_DATA, getGostForGrade } from "../lib/constants";
 import { Activity, LogOut, Plus, Trash2, Settings, Moon, Sun, Info, TrendingUp, Calculator, Wallet, Layers, Package, Upload, FileText, X } from "lucide-react";
 import { useEffect, useState, useRef, ChangeEvent, MouseEvent } from "react";
 import { motion, AnimatePresence } from "motion/react";
@@ -849,7 +849,7 @@ export function AdminPanel({
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => {
-                        const headers = ["Марка заг.", "Размер мм. (Заг.)", "Длина мм.", "Кол-во тн заг.", "Кол-во шт"];
+                        const headers = ["НТД", "Профиль", "Марка заг.", "Размер мм. (Заг.)", "Длина мм.", "Кол-во тн заг."];
                         if (!isPurchasingMode) headers.push("Сумма (руб)");
 
                         const rows = Object.entries<{weight: number, count: number, cost: number}>(
@@ -867,11 +867,12 @@ export function AdminPanel({
                         .map(([key, data]) => {
                           const [grade, size, length] = key.split(' | ');
                           const row = [
+                            `ГОСТ 2590-2006/${getGostForGrade(grade)}`,
+                            "Круг",
                             grade,
                             String(size).replace(".", ","),
                             length,
-                            String(data.weight.toFixed(3)).replace(".", ","),
-                            String(data.count)
+                            String(data.weight.toFixed(3)).replace(".", ",")
                           ];
                           if (!isPurchasingMode) row.push(String(Math.round(data.cost)).replace(".", ","));
                           return row;
@@ -904,7 +905,7 @@ export function AdminPanel({
 
                     <button
                       onClick={() => {
-                        const headers = ["Марка заг.", "Размер мм. (Заг.)", "Длина мм.", "Кол-во тн заг.", "Кол-во шт"];
+                        const headers = ["НТД", "Профиль", "Марка заг.", "Размер мм. (Заг.)", "Длина мм.", "Кол-во тн заг."];
                         if (!isPurchasingMode) headers.push("Сумма (руб)");
 
                         const rows = Object.entries<{weight: number, count: number, cost: number}>(
@@ -922,11 +923,12 @@ export function AdminPanel({
                         .map(([key, data]) => {
                           const [grade, size, length] = key.split(' | ');
                           const row = [
+                            `ГОСТ 2590-2006/${getGostForGrade(grade)}`,
+                            "Круг",
                             grade,
                             String(size).replace(".", ","),
                             length,
-                            String(data.weight.toFixed(3)).replace(".", ","),
-                            String(data.count)
+                            String(data.weight.toFixed(3)).replace(".", ",")
                           ];
                           if (!isPurchasingMode) row.push(String(Math.round(data.cost)).replace(".", ","));
                           return row;
@@ -957,7 +959,7 @@ export function AdminPanel({
 
                         worksheet["!views"] = [{ state: "frozen", ySplit: 1 }];
                         const out_wcut = [
-                            { wch: 20 }, { wch: 20 }, { wch: 15 }, { wch: 20 }, { wch: 15 }, { wch: 15 }
+                            { wch: 25 }, { wch: 15 }, { wch: 20 }, { wch: 20 }, { wch: 15 }, { wch: 20 }, { wch: 15 }
                         ];
                         worksheet["!cols"] = out_wcut;
                         
@@ -1284,7 +1286,7 @@ export function AdminPanel({
                               </div>
                               <button
                                 onClick={() => {
-                                  const headers = ["Марка заг.", "Размер мм.", "Длина", "Кол-во тн", "Кол-во шт"];
+                                  const headers = ["НТД", "Профиль", "Марка заг.", "Размер мм.", "Длина", "Кол-во тн"];
                                   if (!isPurchasingMode) headers.push("Сумма (руб)");
 
                                   const rows = Object.entries<{weight: number, count: number, cost: number}>(
@@ -1302,11 +1304,12 @@ export function AdminPanel({
                                   .map(([key, data]) => {
                                     const [grade, size, length] = key.split(' | ');
                                     const row = [
+                                      `ГОСТ 2590-2006/${getGostForGrade(grade)}`,
+                                      "Круг",
                                       grade,
                                       String(size).replace(".", ","),
                                       length,
-                                      String(data.weight.toFixed(3)).replace(".", ","),
-                                      String(data.count)
+                                      String(data.weight.toFixed(3)).replace(".", ",")
                                     ];
                                     if (!isPurchasingMode) row.push(String(Math.round(data.cost)).replace(".", ","));
                                     return row;
@@ -1337,7 +1340,7 @@ export function AdminPanel({
 
                                   worksheet["!views"] = [{ state: "frozen", ySplit: 1 }];
                                   const out_wcut = [
-                                      { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }
+                                      { wch: 25 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }
                                   ];
                                   worksheet["!cols"] = out_wcut;
                                   
