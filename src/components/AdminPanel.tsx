@@ -116,6 +116,59 @@ export function AdminPanel({
   const [isProcessing, setIsProcessing] = useState(false);
   const [calculationResults, setCalculationResults] = useState<CalculationResult[]>([]);
 
+  const applyAllOptimizations = () => {
+    setCalculationResults(prev => prev.map(item => {
+      if (item.optimizedBilletLength && item.optimizedBilletLength !== item.billetLength && item.optimizedKim && item.optimizedKim > (item.remainingToProcess / item.totalWeight) + 0.005) {
+        const newBilletLength = item.optimizedBilletLength;
+        const newDrawLen = newBilletLength * item.drawRatio;
+        const newUsefulLen = newDrawLen / (item.type === "Шестигранник" ? 1.03 * 1.003 : 1.027 * 1.003);
+        
+        let newPcs = 0;
+        let newActualUL = 0;
+        if (item.lengthType === "НД") {
+          for (let i = 1; i <= 20; i++) {
+            const optLen = Math.floor(newUsefulLen / i) - 5;
+            if (optLen >= 2500 && optLen <= 6500) {
+              newPcs = i;
+              newActualUL = newPcs * optLen;
+              break;
+            }
+          }
+          if (newPcs === 0) newActualUL = newUsefulLen;
+        } else {
+          newPcs = Math.floor(newUsefulLen / item.length);
+          newActualUL = newPcs * item.length;
+        }
+        
+        const newKim = newDrawLen > 0 ? newActualUL / newDrawLen : 0;
+        const newTotalWeight = newKim > 0 ? item.remainingToProcess / newKim : item.remainingToProcess;
+        const billetArea = item.type === "Шестигранник" 
+          ? (Math.sqrt(3) / 2) * Math.pow(item.billetDia, 2)
+          : (Math.PI * Math.pow(item.billetDia, 2)) / 4;
+        const wPerM = billetArea * 0.00000785 * 1000;
+        const singleBMass = (newBilletLength / 1000) * wPerM;
+        const newBilletCount = singleBMass > 0 ? Math.ceil((newTotalWeight * 1000) / singleBMass) : 0;
+        const gradePrices = rawPrices[item.grade] || { md: "0", nd: "0" };
+        const basePr = parseFloat(gradePrices.nd || "0");
+        const newPr = item.lengthType === "МД" ? basePr * 1.06 : basePr;
+        const newTotCost = newTotalWeight * newPr;
+
+        return {
+          ...item,
+          billetLength: newBilletLength,
+          drawLength: newDrawLen,
+          usefulLength: newUsefulLen,
+          actualUsefulLength: newActualUL,
+          kim: newKim,
+          totalWeight: newTotalWeight,
+          billetCount: newBilletCount,
+          totalCost: newTotCost
+        };
+      }
+      return item;
+    }));
+  };
+
   // Grab-to-scroll state for the table
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -329,8 +382,9 @@ export function AdminPanel({
             let lengthType: "НД" | "МД" = "МД";
             
             const lengthMatch = nomenclature.match(/х\s*(\d+)/i);
-            const lenTypeMatch = nomenclature.match(/(М\/Д|МД|Н\/Д|НД)/i);
-            const isND = (lenTypeMatch && (lenTypeMatch[1].toUpperCase() === "НД" || lenTypeMatch[1].toUpperCase() === "Н/Д")) || nomenclature.toUpperCase().includes("НД") || nomenclature.toUpperCase().includes("Н.Д.");
+            const nomClean = nomenclature.toUpperCase().replace(/\s/g, '');
+            const lenTypeMatch = nomClean.match(/(М\/Д|МД|Н\/Д|НД)/);
+            const isND = (lenTypeMatch && (lenTypeMatch[1] === "НД" || lenTypeMatch[1] === "Н/Д")) || nomClean.includes("НД") || nomClean.includes("Н.Д.") || nomClean.includes("Н/Д");
             
             if (lengthMatch && !isND) {
               length = parseInt(lengthMatch[1]);
@@ -385,40 +439,33 @@ export function AdminPanel({
         let billetLength = 0;
         const totalTechCoef = item.type === "Шестигранник" ? 1.03 * 1.003 : 1.027 * 1.003;
 
-        if (item.lengthType === "НД") {
+                if (item.lengthType === "НД") {
           billetLength = 6000;
         } else {
-          const safeLength = item.length || 6000;
-          const options = [];
-          
-          for (let pcs = 1; pcs <= 60; pcs++) {
-            const idealBillet = (pcs * safeLength * totalTechCoef) / drawRatio;
-            const roundedBillet = Math.ceil(idealBillet / 100) * 100;
-            
-            if (roundedBillet >= 4000 && roundedBillet <= 8800) {
-              const drawLen = roundedBillet * drawRatio;
-              const usable = drawLen / totalTechCoef;
-              const scrap = usable - (pcs * safeLength);
-              if (scrap >= 0) {
-                options.push({ n: pcs, billetLength: roundedBillet, scrap });
-              }
-            }
-          }
-          
-          if (options.length > 0) {
-            options.sort((a, b) => a.scrap - b.scrap);
-            billetLength = options[0].billetLength;
-          } else {
-            billetLength = 6000;
-          }
+          billetLength = 6000; // Default billet length is 6000, optimization is suggested via button
         }
 
         const drawLength = billetLength * drawRatio;
         const usefulLength = drawLength / totalTechCoef;
         const techEnds = drawLength - usefulLength;
         
-        const piecesCount = item.lengthType === "НД" ? 0 : Math.floor(usefulLength / item.length);
-        const actualUsefulLength = item.lengthType === "НД" ? usefulLength : piecesCount * item.length;
+        let piecesCount = 0;
+        let actualUsefulLength = 0;
+
+        if (item.lengthType === "НД") {
+          for (let i = 1; i <= 20; i++) {
+            const optLen = Math.floor(usefulLength / i) - 5;
+            if (optLen >= 2500 && optLen <= 6500) {
+              piecesCount = i;
+              actualUsefulLength = piecesCount * optLen;
+              break;
+            }
+          }
+          if (piecesCount === 0) actualUsefulLength = usefulLength;
+        } else {
+          piecesCount = Math.floor(usefulLength / item.length);
+          actualUsefulLength = piecesCount * item.length;
+        }
 
         // --- Optimization Step for KIM improvement ---
         let optimizedBilletLength = billetLength;
@@ -426,7 +473,7 @@ export function AdminPanel({
 
         if (item.lengthType === "МД" && item.length > 0) {
           const MIN_B = 4000;
-          const MAX_B = 8500;
+          const MAX_B = Math.floor(8400 / drawRatio);
           const STEP = 100;
           
           for (let l = MIN_B; l <= MAX_B; l += STEP) {
@@ -1258,7 +1305,7 @@ export function AdminPanel({
                                 onClick={() => {
                                   const headers = [
                                     "Внутренняя нумерация", "Дата отгрузки", "№ Заказа", "Клиент", "Номенклатура", "Профиль", "Марка", "Размер мм.", "Длина", "Кол-во тн в заказе", "Остаток к выполнению",
-                                    "Номенклатура заг.", "Марка заг.", "Размер мм. (Заг.)", "Кол-во тн заг.", "Длина мм."
+                                    "Номенклатура заг.", "Марка заг.", "Размер мм. (Заг.)", "Кол-во тн заг.", "Длина мм.", "Тех. Отходы (тн)", "Деловой Остаток (тн)"
                                   ];
                                   if (!isPurchasingMode) headers.push("Цена (руб)", "Сумма (руб)");
 
@@ -1279,7 +1326,9 @@ export function AdminPanel({
                                       res.grade,
                                       String(res.billetDia).replace(".", ","),
                                       String(res.totalWeight.toFixed(3)).replace(".", ","),
-                                      res.lengthType === "НД" ? "НД" : `МД ${res.billetLength}`
+                                      res.lengthType === "НД" ? "НД" : `МД ${res.billetLength}`,
+                                      String(res.drawLength > 0 ? ((res.techEnds / res.drawLength) * res.totalWeight).toFixed(3) : 0).replace(".", ","),
+                                      String(res.lengthType === "НД" || res.drawLength <= 0 ? 0 : ((res.usefulLength - (res.pcsPerBillet * res.length)) / res.drawLength * res.totalWeight).toFixed(3)).replace(".", ",")
                                     ];
                                     if (!isPurchasingMode) {
                                       row.push(String(res.price).replace(".", ","), String(res.totalCost.toFixed(0)).replace(".", ","));
@@ -1318,7 +1367,7 @@ export function AdminPanel({
                                   
                                   const headers = [
                                     "Внутренняя нумерация", "Дата отгрузки", "№ Заказа", "Клиент", "Номенклатура", "Профиль", "Марка", "Размер мм.", "Длина", "Кол-во тн в заказе", "Остаток к выполнению",
-                                    "Номенклатура заг.", "Марка заг.", "Размер мм. (Заг.)", "Кол-во тн заг.", "Длина мм."
+                                    "Номенклатура заг.", "Марка заг.", "Размер мм. (Заг.)", "Кол-во тн заг.", "Длина мм.", "Тех. Отходы (тн)", "Деловой Остаток (тн)"
                                   ];
                                   if (!isPurchasingMode) headers.push("Цена (руб)", "Сумма (руб)");
                                   
@@ -1339,7 +1388,9 @@ export function AdminPanel({
                                       res.grade,
                                       String(res.billetDia).replace(".", ","),
                                       String(res.totalWeight.toFixed(3)).replace(".", ","),
-                                      res.lengthType === "НД" ? "НД" : `МД ${res.billetLength}`
+                                      res.lengthType === "НД" ? "НД" : `МД ${res.billetLength}`,
+                                      String(res.drawLength > 0 ? ((res.techEnds / res.drawLength) * res.totalWeight).toFixed(3) : 0).replace(".", ","),
+                                      String(res.lengthType === "НД" || res.drawLength <= 0 ? 0 : ((res.usefulLength - (res.pcsPerBillet * res.length)) / res.drawLength * res.totalWeight).toFixed(3)).replace(".", ",")
                                     ];
                                     if (!isPurchasingMode) {
                                       row.push(String(res.price).replace(".", ","), String(res.totalCost.toFixed(0)).replace(".", ","));
@@ -1398,6 +1449,16 @@ export function AdminPanel({
                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                                 Скачать Excel
                               </button>
+                               {calculationResults.some(item => item.optimizedBilletLength && item.optimizedBilletLength !== item.billetLength && item.optimizedKim && item.optimizedKim > (item.remainingToProcess / item.totalWeight) + 0.005) && (
+                                <button
+                                  onClick={applyAllOptimizations}
+                                  className="flex items-center gap-2 px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl text-xs font-bold transition-colors shadow-sm"
+                                  title="Автоматически применить все предложенные улучшения КИМ"
+                                >
+                                  <TrendingUp className="w-4 h-4" />
+                                  Применить все улучшения КИМ
+                                </button>
+                              )}
                             </div>
                           </div>
 
@@ -1428,6 +1489,8 @@ export function AdminPanel({
                                   <th className="px-5 py-4 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Размер мм.</th>
                                   <th className="px-5 py-4 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap text-emerald-600">Кол-во тн заг.</th>
                                   <th className="px-5 py-4 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Длина мм.</th>
+                                  <th className="px-5 py-4 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap text-amber-500/80">Тех. Отходы</th>
+                                  <th className="px-5 py-4 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap text-amber-500/80">Делов. Остаток</th>
                                   <th className="px-5 py-4 text-center text-[10px] font-bold text-amber-500 uppercase tracking-widest whitespace-nowrap">КИМ / Совет</th>
                                   {!isPurchasingMode && (
                                     <>
@@ -1489,6 +1552,14 @@ export function AdminPanel({
                                     </td>
                                     <td className="px-5 py-3 whitespace-nowrap text-slate-500 text-center">
                                       {res.lengthType === "НД" ? "НД" : `МД ${res.billetLength}`}
+                                    </td>
+                                    <td className="px-5 py-3 whitespace-nowrap text-center">
+                                      <span className="font-bold text-red-500/80 block">{res.drawLength > 0 ? ((res.techEnds / res.drawLength) * res.totalWeight).toFixed(3) : 0} тн</span>
+                                      <span className="text-[9px] text-slate-400 block">{res.drawLength > 0 ? (((res.techEnds / res.drawLength) * res.totalWeight / res.totalWeight) * 100).toFixed(1) : 0}%</span>
+                                    </td>
+                                    <td className="px-5 py-3 whitespace-nowrap text-center">
+                                      <span className="font-bold text-sky-500/80 block">{(res.lengthType === "НД" || res.drawLength <= 0 ? 0 : ((res.usefulLength - (res.pcsPerBillet * res.length)) / res.drawLength * res.totalWeight)).toFixed(3)} тн</span>
+                                      <span className="text-[9px] text-slate-400 block">{(res.lengthType === "НД" || res.drawLength <= 0 ? 0 : (((res.usefulLength - (res.pcsPerBillet * res.length)) / res.drawLength * res.totalWeight / res.totalWeight) * 100)).toFixed(1)}%</span>
                                     </td>
                                     <td className="px-5 py-3 whitespace-nowrap text-center">
                                       <div className="flex flex-col items-center gap-1">

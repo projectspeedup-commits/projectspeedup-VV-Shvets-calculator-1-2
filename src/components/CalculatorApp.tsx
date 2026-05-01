@@ -280,7 +280,8 @@ export function CalculatorApp({
       // Округляем вверх до ближайших 100 мм (согласно запросу)
       const roundedBillet = Math.ceil(idealBillet / 100) * 100;
       
-      if (roundedBillet >= 4000 && roundedBillet <= 8800) {
+      const maxBillet = Math.floor(8400 / draw);
+      if (roundedBillet >= 4000 && roundedBillet <= Math.min(8800, maxBillet)) {
         const estUseful = (roundedBillet * draw) / tech;
         const scrap = estUseful - (n * targetPiece);
         // Добавляем только если остаток положительный (поместится)
