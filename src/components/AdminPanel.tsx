@@ -1,8 +1,10 @@
 import { DEFAULT_STEEL_GRADES, formatInputValue, handleNumericInput, DEFAULT_ECONOMY_ITEMS, EconomyItem, ROUND_DATA, HEX_DATA, getGostForGrade } from "../lib/constants";
-import { Activity, LogOut, Plus, Trash2, Settings, Moon, Sun, Info, TrendingUp, Calculator, Wallet, Layers, Package, Upload, FileText, X } from "lucide-react";
+import { Activity, LogOut, Plus, Trash2, Settings, Moon, Sun, Info, TrendingUp, Calculator, Wallet, Layers, Package, Upload, FileText, X, BookOpen, ChevronLeft, Download, Copy, Check } from "lucide-react";
 import { useEffect, useState, useRef, ChangeEvent, MouseEvent } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import * as XLSX from "xlsx-js-style";
+import { BatchManualModal } from "./BatchManualModal";
+import { StockManualModal } from "./StockManualModal";
 
 interface CalculationResult {
   id: string;
@@ -82,6 +84,8 @@ export function AdminPanel({
   const [scrap, setScrap] = useState(initialScrap);
   const [remnant, setRemnant] = useState(initialRemnant);
   const [customGrades, setCustomGrades] = useState(initialCustomGrades || []);
+  const [isBatchManualOpen, setIsBatchManualOpen] = useState(false);
+  const [isStockManualOpen, setIsStockManualOpen] = useState(false);
   const [deletedGrades, setDeletedGrades] = useState<string[]>(initialDeletedGrades || []);
   const [remnantPricing, setRemnantPricing] = useState<Record<string, { round: string; hex: string }>>(initialRemnantPricing || {});
   const [economyItems, setEconomyItems] = useState<EconomyItem[]>(() => {
@@ -96,13 +100,15 @@ export function AdminPanel({
   const [saveError, setSaveError] = useState("");
 
   const [adminSection, setAdminSection] = useState<"direct" | "prices" | "grades">("direct");
-  const [supplySection, setSupplySection] = useState<"files" | "calc">("files");
+  const [supplySection, setSupplySection] = useState<"files" | "calc" | "stock" | "calc-stock">("files");
+  const [isCopied, setIsCopied] = useState(false);
 
   const formatCurrency = (val: number) => {
     return val.toLocaleString("ru-RU", { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + " ₽";
   };
   const [planFiles, setPlanFiles] = useState<{ id: string; name: string; size: string; date: string; file?: File }[]>([]);
   const [stockFiles, setStockFiles] = useState<{ id: string; name: string; size: string; date: string; file?: File }[]>([]);
+  const [processedStock, setProcessedStock] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const stockFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -114,6 +120,7 @@ export function AdminPanel({
 
   // Supply Calculation Logic & Mock Data Extraction
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isProcessingStock, setIsProcessingStock] = useState(false);
   const [calculationResults, setCalculationResults] = useState<CalculationResult[]>([]);
 
   const applyAllOptimizations = () => {
@@ -537,6 +544,152 @@ export function AdminPanel({
     }
   };
 
+  const handleProcessStock = async () => {
+    if (stockFiles.length === 0) return;
+    setIsProcessingStock(true);
+    
+    try {
+      const extractedStock: any[] = [];
+      
+      for (const fileObj of stockFiles) {
+        if (!fileObj.file) continue;
+        
+        const data = await fileObj.file.arrayBuffer();
+        const workbook = XLSX.read(data, { type: "array" });
+        
+        for (const sheetName of workbook.SheetNames) {
+          const worksheet = workbook.Sheets[sheetName];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" }) as any[][];
+          
+          let startRow = 0;
+          let nomCol = -1;
+          let weightCol = -1;
+          
+          for (let i = 0; i < Math.min(100, jsonData.length); i++) {
+            const rowStr = jsonData[i].join(" ").toLowerCase();
+            if (rowStr.includes("номенклатура") || rowStr.includes("остаток")) {
+              startRow = i + 1;
+              jsonData[i].forEach((cell: any, idx: number) => {
+                const c = String(cell).toLowerCase().trim();
+                if (c.includes("номенклатура") || c.includes("наименование")) nomCol = idx;
+                if (c.includes("конечный остаток") || c.includes("остаток") || c.includes("кол-во")) weightCol = idx;
+              });
+              break;
+            }
+          }
+          
+          if (nomCol === -1 || weightCol === -1) continue;
+          
+          for (let i = startRow; i < jsonData.length; i++) {
+            const row = jsonData[i] || [];
+            if (!row[nomCol]) continue;
+            
+            const rawNom = String(row[nomCol]).trim();
+            const rawWeight = row[weightCol];
+            let weight = typeof rawWeight === "number" ? rawWeight : parseFloat(String(rawWeight || "0").replace(/\s/g, "").replace(",", "."));
+            if (isNaN(weight) || weight <= 0.0001) continue;
+            
+            let profile = "круг";
+            if (rawNom.toLowerCase().includes("шестиг")) profile = "шестигранник";
+            
+            let grade = "ст.35";
+            const gMatch = rawNom.match(/(?:^|[^а-яА-ЯёЁa-zA-Z])(?:ст\.?|сталь)\s*([0-9a-zA-Zа-яА-Я-]+)/i);
+            if (gMatch) {
+              grade = "ст." + gMatch[1].toUpperCase();
+            } else {
+               const alloyMatch = rawNom.match(/\b(\d{2}[ХхНнМмТтВвГгДд]+[0-9a-zA-Zа-яА-Я-]*)\b/);
+               if (alloyMatch) grade = "ст." + alloyMatch[1].toUpperCase();
+            }
+            grade = grade.replace(/[хХxX]\s*\d{3,}$/i, '');
+            
+            let diameter = "";
+            const sizeMatch = rawNom.match(/(?:круг|шестигранник)\s*(?:калибровоченный|калибровочный|калиброванный|калибр\.?)?\s*(\d+(?:[.,]\d+)?)/i);
+            if (sizeMatch) {
+                diameter = sizeMatch[1];
+            } else {
+                const sizeFallback = rawNom.match(/\s+(\d+(?:[.,]\d+)?)\s*(?:мм)?\s*/i);
+                if (sizeFallback && !sizeFallback[1].includes("1050") && !sizeFallback[1].includes("7417") && !sizeFallback[1].includes("2590")) {
+                    diameter = sizeFallback[1];
+                }
+            }
+            
+            const nomUpper = rawNom.toUpperCase();
+            const nomClean = nomUpper.replace(/\s/g, '');
+            
+            let lengthType = "Н/Д";
+            
+            // Парсинг М/Д, МД, Н/Д
+            const mdMatch = nomClean.match(/(?:М\/Д|МД)(\d+)?/);
+            const ndSlashMatch = nomClean.match(/Н\/Д(\d+)?/);
+            const ndMatch = nomClean.includes("НД");
+            
+            if (mdMatch) {
+              const val = mdMatch[1] === "6000" || !mdMatch[1] ? "6000" : mdMatch[1];
+              lengthType = "МД " + val;
+            }
+
+            extractedStock.push({
+              "Исходная Номенклатура": rawNom,
+              "Профиль": profile,
+              "НТД": getGostForGrade(grade) + " / ГОСТ 2590-2006",
+              "Марка стали": grade,
+              "Размер": diameter,
+              "Длина": lengthType,
+              "Конечный остаток тн.": weight
+            });
+          }
+        }
+      }
+      
+      if (extractedStock.length === 0) {
+        alert("Не удалось извлечь остатки из загруженных файлов.");
+        return;
+      }
+      
+      setProcessedStock(extractedStock);
+      
+    } catch (err) {
+      console.error("Error processing stock files:", err);
+    } finally {
+      setIsProcessingStock(false);
+    }
+  };
+
+  const handleCopyForSheets = async () => {
+    if (processedStock.length === 0) return;
+    
+    const keys = Object.keys(processedStock[0]);
+    const headerRow = keys.join("\t");
+    const rows = processedStock.map(row => 
+      keys.map(key => {
+        const val = row[key];
+        return String(val ?? "").replace(/\t/g, " ").replace(/\n/g, " ");
+      }).join("\t")
+    );
+    
+    const tsvData = [headerRow, ...rows].join("\n");
+    
+    try {
+      await navigator.clipboard.writeText(tsvData);
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), 2000);
+    } catch (err) {
+      console.error("Ошибка копирования: ", err);
+      alert("Не удалось скопировать данные.");
+    }
+  };
+
+  const handleExportStock = () => {
+    if (processedStock.length === 0) return;
+    const worksheet = XLSX.utils.json_to_sheet(processedStock);
+    const wscols = Object.keys(processedStock[0]).map(key => ({ wch: Math.max(key.length, 15) }));
+    wscols[0].wch = 50;
+    worksheet['!cols'] = wscols;
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Остатки_Склад");
+    XLSX.writeFile(workbook, "Остатки_обработанные.xlsx");
+  };
+
   const handleFileUpload = (e: ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
@@ -574,6 +727,24 @@ export function AdminPanel({
   const removeStockFile = (id: string) => {
     setStockFiles(prev => prev.filter(f => f.id !== id));
   };
+
+  useEffect(() => {
+    if (stockFiles.length > 0) {
+      handleProcessStock();
+    } else {
+      setProcessedStock([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stockFiles]);
+
+  useEffect(() => {
+    if (planFiles.length > 0) {
+      handleProcessPlans();
+    } else {
+      setCalculationResults([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planFiles]);
 
   useEffect(() => {
     setRawPrices(prev => JSON.stringify(prev) === JSON.stringify(initialRawPrices) ? prev : initialRawPrices);
@@ -841,7 +1012,27 @@ export function AdminPanel({
                         : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
                     }`}
                   >
-                    Расчет потребности
+                    Потребность
+                  </button>
+                  <button
+                    onClick={() => setSupplySection("stock")}
+                    className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                      supplySection === "stock" 
+                        ? "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white" 
+                        : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                    }`}
+                  >
+                    Наличие
+                  </button>
+                  <button
+                    onClick={() => setSupplySection("calc-stock")}
+                    className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all border border-transparent ${
+                      supplySection === "calc-stock" 
+                        ? "bg-sky-50 dark:bg-sky-900/20 text-sky-600 dark:text-sky-400 border-sky-200 dark:border-sky-800" 
+                        : "text-slate-500 hover:text-sky-600 dark:text-slate-400 dark:hover:text-sky-400 outline outline-1 outline-slate-200 dark:outline-slate-800 outline-offset-[-1px] hover:bg-sky-50 dark:hover:bg-sky-900/10 ml-2"
+                    }`}
+                  >
+                    Расчет с учетом наличия
                   </button>
                 </div>
                 
@@ -863,6 +1054,7 @@ export function AdminPanel({
                             return acc;
                           }, {} as Record<string, {weight: number, count: number, cost: number}>)
                         )
+                        .filter(([_, data]) => data.weight >= 0.0005)
                         .sort((a, b) => b[1].weight - a[1].weight)
                         .map(([key, data]) => {
                           const [grade, size, length] = key.split(' | ');
@@ -919,6 +1111,7 @@ export function AdminPanel({
                             return acc;
                           }, {} as Record<string, {weight: number, count: number, cost: number}>)
                         )
+                        .filter(([_, data]) => data.weight >= 0.0005)
                         .sort((a, b) => b[1].weight - a[1].weight)
                         .map(([key, data]) => {
                           const [grade, size, length] = key.split(' | ');
@@ -984,44 +1177,56 @@ export function AdminPanel({
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 10 }}
                     transition={{ duration: 0.2 }}
-                    className="grid grid-cols-1 lg:grid-cols-12 gap-8"
+                    className="flex flex-col gap-8"
                   >
                     {/* File Upload Section */}
-                    <div className="lg:col-span-8 flex flex-col gap-6">
+                    <div className="flex flex-col gap-6">
                       <div className="flex items-center gap-2 px-1">
                         <FileText className="w-5 h-5 text-slate-700 dark:text-slate-300" />
                         <h3 className="text-lg font-medium text-slate-900 dark:text-white">Планы производства</h3>
                       </div>
                       
-                      <div 
-                        onClick={() => fileInputRef.current?.click()}
-                        onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          const files = e.dataTransfer.files;
-                          if (files && files.length > 0) {
-                            const event = { target: { files } } as unknown as ChangeEvent<HTMLInputElement>;
-                            handleFileUpload(event);
-                          }
-                        }}
-                        className="bg-white dark:bg-[#1A1C19] rounded-[24px] border-2 border-dashed border-slate-200 dark:border-slate-800 p-12 flex flex-col items-center justify-center text-center gap-4 group cursor-pointer hover:border-slate-400 dark:hover:border-slate-600 transition-all shadow-sm"
-                      >
-                        <input 
-                          type="file" 
-                          ref={fileInputRef}
-                          onChange={handleFileUpload}
-                          className="hidden" 
-                          multiple
-                          accept=".pdf,.xlsx,.csv,.txt,.docx"
-                        />
-                        <div className="w-16 h-16 bg-slate-50 dark:bg-slate-800 rounded-2xl flex items-center justify-center text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors">
-                          <Upload className="w-8 h-8" />
+                      <div className="relative">
+                        <div 
+                          onClick={() => fileInputRef.current?.click()}
+                          onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const files = e.dataTransfer.files;
+                            if (files && files.length > 0) {
+                              const event = { target: { files } } as unknown as ChangeEvent<HTMLInputElement>;
+                              handleFileUpload(event);
+                            }
+                          }}
+                          className="bg-white dark:bg-[#1A1C19] rounded-[24px] border-2 border-dashed border-slate-200 dark:border-slate-800 p-12 flex flex-col items-center justify-center text-center gap-4 group cursor-pointer hover:border-slate-400 dark:hover:border-slate-600 transition-all shadow-sm"
+                        >
+                          <input 
+                            type="file" 
+                            ref={fileInputRef}
+                            onChange={handleFileUpload}
+                            className="hidden" 
+                            multiple
+                            accept=".pdf,.xlsx,.csv,.txt,.docx"
+                          />
+                          <div className="w-16 h-16 bg-slate-50 dark:bg-slate-800 rounded-2xl flex items-center justify-center text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors">
+                            <Upload className="w-8 h-8" />
+                          </div>
+                          <div>
+                            <p className="text-base font-bold text-slate-900 dark:text-white">Нажмите или перетащите файл</p>
+                            <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Excel или CSV файлы планов</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-base font-bold text-slate-900 dark:text-white">Нажмите или перетащите файл</p>
-                          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">PDF, Excel, CSV или текстовые файлы планов</p>
-                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setIsBatchManualOpen(true);
+                          }}
+                          className="absolute top-4 right-4 flex items-center justify-center w-9 h-9 bg-white dark:bg-[#1A1C19] hover:bg-slate-100 dark:hover:bg-[#252824] text-slate-600 dark:text-[#E2E3DE] rounded-xl transition-all focus:outline-none border border-slate-200 dark:border-[#2C2F2B] shadow-sm z-10"
+                          title="Инструкция по расчетам"
+                        >
+                          <BookOpen className="w-5 h-5" />
+                        </button>
                       </div>
 
                       {planFiles.length > 0 && (
@@ -1030,23 +1235,21 @@ export function AdminPanel({
                             <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Загруженные файлы</span>
                             <div className="flex items-center gap-3">
                               <span className="text-[10px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2.5 py-1 rounded-full">{planFiles.length} файлов</span>
-                              {planFiles.length > 0 && (
+                              {isProcessing && (
+                                <div className="text-[10px] text-slate-500 flex items-center gap-2 font-medium">
+                                  <div className="w-3 h-3 border-2 border-sky-500/20 border-t-sky-500 rounded-full animate-spin" />
+                                  Расчет...
+                                </div>
+                              )}
+                              {!isProcessing && calculationResults.length > 0 && (
                                 <motion.button 
                                   whileHover={{ scale: 1.02 }}
                                   whileTap={{ scale: 0.98 }}
-                                  onClick={() => {
-                                    handleProcessPlans();
-                                    setSupplySection("calc");
-                                  }}
-                                  disabled={isProcessing}
-                                  className="bg-sky-500 hover:bg-sky-600 text-white text-[10px] font-bold px-4 py-1.5 rounded-full shadow-lg shadow-sky-500/20 active:scale-95 transition-all flex items-center gap-2"
+                                  onClick={() => setSupplySection("calc")}
+                                  className="bg-sky-100 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400 text-[10px] font-bold px-4 py-1.5 rounded-full hover:bg-sky-200 dark:hover:bg-sky-900/50 transition-all flex items-center gap-2"
                                 >
-                                  {isProcessing ? (
-                                    <div className="w-3 h-3 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                                  ) : (
-                                    <Activity className="w-3.5 h-3.5" />
-                                  )}
-                                  <span>Рассчитать потребности</span>
+                                  <Activity className="w-3.5 h-3.5" />
+                                  <span>Показать расчеты</span>
                                 </motion.button>
                               )}
                             </div>
@@ -1085,42 +1288,84 @@ export function AdminPanel({
                         <h3 className="text-lg font-medium text-slate-900 dark:text-white">Наличие на складе (г/к прокат)</h3>
                       </div>
                       
-                      <div 
-                        onClick={() => stockFileInputRef.current?.click()}
-                        onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          const files = e.dataTransfer.files;
-                          if (files && files.length > 0) {
-                            const event = { target: { files } } as unknown as ChangeEvent<HTMLInputElement>;
-                            handleStockFileUpload(event);
-                          }
-                        }}
-                        className="bg-white dark:bg-[#1A1C19] rounded-[24px] border-2 border-dashed border-sky-200 dark:border-sky-900/30 p-12 flex flex-col items-center justify-center text-center gap-4 group cursor-pointer hover:border-sky-400 dark:hover:border-sky-700 transition-all shadow-sm"
-                      >
-                        <input 
-                          type="file" 
-                          ref={stockFileInputRef}
-                          onChange={handleStockFileUpload}
-                          className="hidden" 
-                          multiple
-                          accept=".pdf,.xlsx,.csv,.txt,.docx"
-                        />
-                        <div className="w-16 h-16 bg-sky-50 dark:bg-sky-900/20 rounded-2xl flex items-center justify-center text-sky-400 group-hover:text-sky-600 transition-colors">
-                          <Layers className="w-8 h-8" />
+                      <div className="relative">
+                        <div 
+                          onClick={() => stockFileInputRef.current?.click()}
+                          onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const files = e.dataTransfer.files;
+                            if (files && files.length > 0) {
+                              const event = { target: { files } } as unknown as ChangeEvent<HTMLInputElement>;
+                              handleStockFileUpload(event);
+                            }
+                          }}
+                          className="bg-white dark:bg-[#1A1C19] rounded-[24px] border-2 border-dashed border-sky-200 dark:border-sky-900/30 p-12 flex flex-col items-center justify-center text-center gap-4 group cursor-pointer hover:border-sky-400 dark:hover:border-sky-700 transition-all shadow-sm"
+                        >
+                          <input 
+                            type="file" 
+                            ref={stockFileInputRef}
+                            onChange={handleStockFileUpload}
+                            className="hidden" 
+                            multiple
+                            accept=".pdf,.xlsx,.csv,.txt,.docx"
+                          />
+                          <div className="w-16 h-16 bg-sky-50 dark:bg-sky-900/20 rounded-2xl flex items-center justify-center text-sky-400 group-hover:text-sky-600 transition-colors">
+                            <Layers className="w-8 h-8" />
+                          </div>
+                          <div>
+                            <p className="text-base font-bold text-slate-900 dark:text-white">Загрузить реестр склада</p>
+                            <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Остатки горячекатаного проката в любом формате</p>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setIsStockManualOpen(true);
+                              }}
+                              className="text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300 font-medium text-sm mt-3 underline"
+                            >
+                              Как правильно подготовить файл склада?
+                            </button>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-base font-bold text-slate-900 dark:text-white">Загрузить реестр склада</p>
-                          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Остатки горячекатаного проката в любом формате</p>
-                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setIsStockManualOpen(true);
+                          }}
+                          className="absolute top-4 right-4 flex items-center justify-center w-9 h-9 bg-white dark:bg-[#1A1C19] hover:bg-slate-100 dark:hover:bg-[#252824] text-slate-600 dark:text-[#E2E3DE] rounded-xl transition-all focus:outline-none border border-slate-200 dark:border-[#2C2F2B] shadow-sm z-10"
+                          title="Инструкция по складу"
+                        >
+                          <BookOpen className="w-5 h-5" />
+                        </button>
                       </div>
 
                       {stockFiles.length > 0 && (
                         <div className="bg-white dark:bg-[#1A1C19] rounded-[24px] border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
                           <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
-                            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Актуальные остатки</span>
-                            <span className="text-[10px] font-medium bg-sky-100 dark:bg-sky-900/30 text-sky-600 dark:text-sky-300 px-2.5 py-1 rounded-full">{stockFiles.length} файлов</span>
+                            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Загруженные файлы склада</span>
+                            <div className="flex items-center gap-3">
+                              <span className="text-[10px] font-medium bg-sky-100 dark:bg-sky-900/30 text-sky-600 dark:text-sky-300 px-2.5 py-1 rounded-full">{stockFiles.length} файлов</span>
+                              
+                              {isProcessingStock && (
+                                <div className="text-[10px] text-slate-500 flex items-center gap-2 font-medium">
+                                  <div className="w-3 h-3 border-2 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin" />
+                                  Обработка...
+                                </div>
+                              )}
+
+                              {!isProcessingStock && processedStock.length > 0 && (
+                                <motion.button 
+                                  whileHover={{ scale: 1.02 }}
+                                  whileTap={{ scale: 0.98 }}
+                                  onClick={() => setSupplySection("stock")}
+                                  className="bg-sky-100 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400 text-[10px] font-bold px-4 py-1.5 rounded-full hover:bg-sky-200 dark:hover:bg-sky-900/50 transition-all flex items-center gap-2"
+                                >
+                                  <Layers className="w-3.5 h-3.5" />
+                                  <span>Показать наличие</span>
+                                </motion.button>
+                              )}
+                            </div>
                           </div>
                           <div className="divide-y divide-slate-100 dark:divide-slate-800">
                             {stockFiles.map(file => (
@@ -1153,48 +1398,95 @@ export function AdminPanel({
                         </div>
                       )}
                     </div>
-
-                    {/* Info Sidebar */}
-                    <div className="lg:col-span-4 flex flex-col gap-6">
-                       <div className="bg-[#1A1C19] text-white rounded-[24px] p-8 flex flex-col gap-6 relative overflow-hidden">
-                          <div className="absolute top-0 right-0 w-32 h-32 bg-sky-500/10 rounded-full -mr-16 -mt-16 blur-2xl"></div>
-                          <div className="relative z-10 flex flex-col gap-4">
-                            <div className="w-12 h-12 bg-sky-500/20 rounded-2xl flex items-center justify-center text-sky-400">
-                               <Info className="w-6 h-6" />
-                            </div>
-                            <div>
-                              <h4 className="text-lg font-bold">Управление планами</h4>
-                              <p className="text-slate-400 text-sm mt-2 leading-relaxed">
-                                Загружайте текущие производственные планы для автоматизации расчета потребности в сырье и заготовках.
-                              </p>
-                            </div>
-                            <ul className="space-y-3 mt-2">
-                               <li className="flex items-start gap-3">
-                                  <div className="w-1.5 h-1.5 bg-sky-400 rounded-full mt-1.5 shrink-0"></div>
-                                  <span className="text-xs text-slate-300">Поддержка PDF, Excel и CSV</span>
-                               </li>
-                               <li className="flex items-start gap-3">
-                                  <div className="w-1.5 h-1.5 bg-sky-400 rounded-full mt-1.5 shrink-0"></div>
-                                  <span className="text-xs text-slate-300">Версионность планов</span>
-                               </li>
-                               <li className="flex items-start gap-3">
-                                  <div className="w-1.5 h-1.5 bg-sky-400 rounded-full mt-1.5 shrink-0"></div>
-                                  <span className="text-xs text-slate-300">Прямая интеграция с калькулятором</span>
-                               </li>
-                            </ul>
-                          </div>
-                       </div>
-
-                       <button 
-                        onClick={() => setActiveTab("economy")}
-                        className="w-full bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white px-8 h-14 rounded-[20px] text-sm font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-all border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-center gap-2"
-                      >
-                        Перейти к затратам
-                        <TrendingUp className="w-4 h-4" />
-                      </button>
-                    </div>
                   </motion.div>
-                ) : (
+                ) : supplySection === "stock" ? (
+                  <motion.div
+                    key="supply-stock"
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -10 }}
+                    transition={{ duration: 0.2 }}
+                    className="flex flex-col gap-8"
+                  >
+                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-[#1A1C19] p-6 rounded-[32px] border border-slate-200 dark:border-slate-800 shadow-sm">
+                      <div className="flex items-center gap-4">
+                         <div className="w-12 h-12 bg-emerald-50 dark:bg-emerald-900/30 rounded-2xl flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+                           <Layers className="w-6 h-6" />
+                         </div>
+                         <div>
+                           <h3 className="text-xl font-bold text-slate-900 dark:text-white">Актуальные остатки</h3>
+                           <div className="flex items-center gap-3 mt-1 text-sm font-medium">
+                             <span className="text-slate-500">Обнаружено {processedStock.length} позиций</span>
+                             <span className="w-1.5 h-1.5 rounded-full bg-slate-200 dark:bg-slate-700"></span>
+                             <span className="text-emerald-600 dark:text-emerald-400 font-black">
+                               Итого: {processedStock.reduce((acc, curr) => acc + (typeof curr["Конечный остаток тн."] === 'number' ? curr["Конечный остаток тн."] : parseFloat(curr["Конечный остаток тн."]) || 0), 0).toFixed(3)} тн.
+                             </span>
+                           </div>
+                         </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                         <button 
+                           onClick={handleCopyForSheets}
+                           className="h-12 px-8 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-2xl text-sm font-bold transition-all flex items-center gap-2"
+                         >
+                           {isCopied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                           {isCopied ? <span className="text-emerald-500">Скопировано!</span> : "Копировать для sheets"}
+                         </button>
+                         <button 
+                           onClick={handleExportStock}
+                           className="h-12 px-8 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl text-sm font-bold transition-all shadow-lg shadow-emerald-500/20 flex items-center gap-2"
+                         >
+                           <Download className="w-4 h-4" />
+                           Скачать Excel
+                         </button>
+                      </div>
+                   </div>
+
+                   <div className="bg-white dark:bg-[#1A1C19] rounded-[40px] border border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-200/50 dark:shadow-none overflow-hidden">
+                      <div className="overflow-auto custom-scrollbar max-h-[calc(100vh-300px)] min-h-[400px]">
+                        <table className="w-full text-left border-collapse">
+                          <thead className="text-[10px] uppercase font-black tracking-widest text-slate-400 dark:text-slate-500 sticky top-0 z-10 shadow-sm">
+                            <tr>
+                              <th className="px-8 py-5 bg-[#F8FAFC] dark:bg-[#1A1C19] sticky top-0 uppercase tracking-widest text-[10px]">Номенклатура</th>
+                              <th className="px-6 py-5 bg-[#F8FAFC] dark:bg-[#1A1C19] sticky top-0 uppercase tracking-widest text-[10px]">Профиль</th>
+                              <th className="px-6 py-5 text-center bg-[#F8FAFC] dark:bg-[#1A1C19] sticky top-0 uppercase tracking-widest text-[10px]">Сталь</th>
+                              <th className="px-6 py-5 text-center bg-[#F8FAFC] dark:bg-[#1A1C19] sticky top-0 uppercase tracking-widest text-[10px]">Размер</th>
+                              <th className="px-6 py-5 text-center bg-[#F8FAFC] dark:bg-[#1A1C19] sticky top-0 uppercase tracking-widest text-[10px]">Длина</th>
+                              <th className="px-8 py-5 text-right bg-[#F8FAFC] dark:bg-[#1A1C19] sticky top-0 uppercase tracking-widest text-[10px]">Тн.</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-50 dark:divide-slate-800/50 text-[11px] font-medium text-slate-600 dark:text-slate-300">
+                            {processedStock.map((row, i) => (
+                              <tr key={i} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors group">
+                                <td className="px-8 py-4 text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">
+                                  <div className="max-w-[300px] truncate font-mono text-[10px]" title={row["Исходная Номенклатура"]}>
+                                    {row["Исходная Номенклатура"]}
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4">
+                                  <span className="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 rounded-lg text-slate-900 dark:text-slate-100 font-bold">{row["Профиль"]}</span>
+                                </td>
+                                <td className="px-6 py-4 text-center font-black text-slate-900 dark:text-white">{row["Марка стали"]}</td>
+                                <td className="px-6 py-4 text-center">
+                                   <span className="px-3 py-1 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-full font-black">
+                                     Ø {row["Размер"]}
+                                   </span>
+                                </td>
+                                <td className="px-6 py-4 text-center">
+                                   <span className="px-3 py-1 bg-sky-50 dark:bg-sky-900/20 text-sky-600 dark:text-sky-400 rounded-lg font-black">{row["Длина"]}</span>
+                                </td>
+                                <td className="px-8 py-4 text-right">
+                                   <span className="text-slate-900 dark:text-white font-black text-xs">{row["Конечный остаток тн."]}</span>
+                                   <span className="ml-1 text-[10px] text-slate-400 font-bold">тн</span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                   </div>
+                  </motion.div>
+                ) : supplySection === "calc" ? (
                   <motion.div
                     key="supply-calc"
                     initial={{ opacity: 0, x: 10 }}
@@ -1208,24 +1500,16 @@ export function AdminPanel({
                         <div className="w-20 h-20 bg-sky-50 dark:bg-sky-900/20 rounded-[30px] flex items-center justify-center text-sky-500 mb-6">
                           <Calculator className="w-10 h-10" />
                         </div>
-                        <h3 className="text-xl font-bold text-slate-900 dark:text-white">Ожидание расчета</h3>
+                        <h3 className="text-xl font-bold text-slate-900 dark:text-white">Нет данных</h3>
                         <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 text-center max-w-sm px-6 leading-relaxed">
-                          Загрузите планы производства во вкладке «Файлы» и нажмите кнопку «Рассчитать потребности» для получения результатов.
+                          Загрузите планы производства во вкладке «Файлы». Система автоматически выполнит расчет потребностей.
                         </p>
                         
-                        {planFiles.length > 0 && (
-                          <button 
-                            onClick={handleProcessPlans}
-                            disabled={isProcessing}
-                            className="mt-8 h-12 px-8 bg-sky-500 hover:bg-sky-600 text-white rounded-2xl font-bold text-sm transition-all shadow-lg shadow-sky-500/20 flex items-center gap-3"
-                          >
-                            {isProcessing ? (
-                              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                            ) : (
-                              <Activity className="w-5 h-5" />
-                            )}
-                            Рассчитать сейчас
-                          </button>
+                        {isProcessing && (
+                          <div className="mt-8 flex items-center gap-3 h-12 px-8 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-2xl font-bold text-sm shadow-sm border border-slate-200 dark:border-slate-700">
+                            <div className="w-4 h-4 border-2 border-sky-500/30 border-t-sky-500 rounded-full animate-spin"></div>
+                            Идет расчет...
+                          </div>
                         )}
                       </div>
                     ) : (
@@ -1300,6 +1584,7 @@ export function AdminPanel({
                                       return acc;
                                     }, {} as Record<string, {weight: number, count: number, cost: number}>)
                                   )
+                                  .filter(([_, data]) => data.weight >= 0.0005)
                                   .sort((a, b) => b[1].weight - a[1].weight)
                                   .map(([key, data]) => {
                                     const [grade, size, length] = key.split(' | ');
@@ -1465,9 +1750,11 @@ export function AdminPanel({
 
                         <div className="bg-white dark:bg-[#1A1C19] rounded-[32px] border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
                           <div className="px-8 py-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/20">
-                            <h4 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-widest">Потребность по позициям</h4>
                             <div className="flex items-center gap-4">
-                              <div className="text-xs font-bold text-sky-600">{calculationResults.length} строк</div>
+                              <h4 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-widest mr-4">Потребность по позициям</h4>
+                            </div>
+                            <div className="flex items-center gap-4">
+                              <div className="text-xs font-bold text-slate-400 dark:text-slate-500">{calculationResults.length} строк</div>
                               
                               <button
                                 onClick={() => {
@@ -1477,8 +1764,10 @@ export function AdminPanel({
                                   ];
                                   if (!isPurchasingMode) headers.push("Цена (руб)", "Сумма (руб)");
 
-                                  const rows = calculationResults.map(res => {
-                                    const row = [
+                                  const rows = calculationResults
+                                    .filter(res => res.totalWeight >= 0.0005)
+                                    .map(res => {
+                                      const row = [
                                       res.internalNo || "",
                                       res.shippingDate || "",
                                       res.orderNo || "",
@@ -1487,14 +1776,14 @@ export function AdminPanel({
                                       res.type || "",
                                       res.grade || "",
                                       String(res.diameter).replace(".", ","),
-                                      res.lengthType === "НД" ? "НД (3000-6000)" : `МД ${res.length}`,
+                                      res.lengthType === "НД" ? "НД 6000" : (res.lengthType && String(res.lengthType).startsWith("МД")) ? res.lengthType : `МД ${res.length}`,
                                       String(res.weightTons).replace(".", ","),
                                       String(res.remainingToProcess.toFixed(3)).replace(".", ","),
                                       "Круг г/к ГОСТ 2590-2006",
                                       res.grade,
                                       String(res.billetDia).replace(".", ","),
                                       String(res.totalWeight.toFixed(3)).replace(".", ","),
-                                      res.lengthType === "НД" ? "НД" : `МД ${res.billetLength}`,
+                                      res.lengthType === "НД" ? "НД" : (res.lengthType && String(res.lengthType).startsWith("МД")) ? res.lengthType : `МД ${res.billetLength}`,
                                       String(res.drawLength > 0 ? ((res.techEnds / res.drawLength) * res.totalWeight).toFixed(3) : 0).replace(".", ","),
                                       String(res.lengthType === "НД" || res.drawLength <= 0 ? 0 : ((res.usefulLength - (res.pcsPerBillet * res.length)) / res.drawLength * res.totalWeight).toFixed(3)).replace(".", ",")
                                     ];
@@ -1539,8 +1828,10 @@ export function AdminPanel({
                                   ];
                                   if (!isPurchasingMode) headers.push("Цена (руб)", "Сумма (руб)");
                                   
-                                  const rows = calculationResults.map(res => {
-                                    const row = [
+                                  const rows = calculationResults
+                                    .filter(res => res.totalWeight >= 0.0005)
+                                    .map(res => {
+                                      const row = [
                                       res.internalNo || "",
                                       res.shippingDate || "",
                                       res.orderNo || "",
@@ -1549,14 +1840,14 @@ export function AdminPanel({
                                       res.type || "",
                                       res.grade || "",
                                       String(res.diameter).replace(".", ","),
-                                      res.lengthType === "НД" ? "НД (3000-6000)" : `МД ${res.length}`,
+                                      res.lengthType === "НД" ? "НД 6000" : (res.lengthType && String(res.lengthType).startsWith("МД")) ? res.lengthType : `МД ${res.length}`,
                                       String(res.weightTons).replace(".", ","),
                                       String(res.remainingToProcess.toFixed(3)).replace(".", ","),
                                       "Круг г/к ГОСТ 2590-2006",
                                       res.grade,
                                       String(res.billetDia).replace(".", ","),
                                       String(res.totalWeight.toFixed(3)).replace(".", ","),
-                                      res.lengthType === "НД" ? "НД" : `МД ${res.billetLength}`,
+                                      res.lengthType === "НД" ? "НД 6000" : (res.lengthType && String(res.lengthType).startsWith("МД")) ? res.lengthType : `МД ${res.billetLength}`,
                                       String(res.drawLength > 0 ? ((res.techEnds / res.drawLength) * res.totalWeight).toFixed(3) : 0).replace(".", ","),
                                       String(res.lengthType === "НД" || res.drawLength <= 0 ? 0 : ((res.usefulLength - (res.pcsPerBillet * res.length)) / res.drawLength * res.totalWeight).toFixed(3)).replace(".", ",")
                                     ];
@@ -1709,7 +2000,7 @@ export function AdminPanel({
                                       {parseFloat(res.diameter.toFixed(2))}
                                     </td>
                                     <td className="px-5 py-3 whitespace-nowrap text-center text-slate-800 dark:text-slate-200 font-medium">
-                                      {res.lengthType === "НД" ? "НД (3000-6000)" : `МД ${res.length}`}
+                                      {res.lengthType === "НД" ? "НД 6000" : res.lengthType.startsWith("МД") ? res.lengthType : `МД ${res.length}`}
                                     </td>
                                     <td className="px-5 py-3 whitespace-nowrap text-center font-black text-slate-900 dark:text-white">
                                       {res.weightTons.toFixed(3)}
@@ -1809,27 +2100,31 @@ export function AdminPanel({
                       </div>
                     )}
                   </motion.div>
-                )}
+                ) : supplySection === "calc-stock" ? (
+                  <motion.div
+                    key="supply-calc-stock"
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -10 }}
+                    transition={{ duration: 0.2 }}
+                    className="flex flex-col gap-8"
+                  >
+                    <div className="bg-white dark:bg-[#1A1C19] border border-slate-200 dark:border-slate-800 rounded-[32px] p-12 flex flex-col items-center justify-center min-h-[400px]">
+                      <div className="w-20 h-20 bg-sky-50 dark:bg-sky-900/20 rounded-[30px] flex items-center justify-center text-sky-500 mb-6">
+                        <Activity className="w-10 h-10" />
+                      </div>
+                      <h3 className="text-xl font-bold text-slate-900 dark:text-white">Расчет с учетом наличия</h3>
+                      <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 text-center max-w-sm px-6 leading-relaxed">
+                        Алгоритм распределения остатков на потребность в разработке...
+                      </p>
+                    </div>
+                  </motion.div>
+                ) : null}
               </AnimatePresence>
             </motion.div>
           )}
 
-          {!isProcessing && calculationResults.length === 0 && (
-            <motion.div
-              layout
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="flex flex-col items-center justify-center py-20 bg-slate-50/50 dark:bg-white/5 rounded-[32px] border-2 border-dashed border-slate-200 dark:border-slate-800"
-            >
-              <div className="w-20 h-20 bg-white dark:bg-slate-800 rounded-3xl shadow-sm flex items-center justify-center text-slate-300 mb-6">
-                <Calculator className="w-10 h-10" />
-              </div>
-              <h4 className="text-lg font-bold text-slate-900 dark:text-white">Нет данных для расчета</h4>
-              <p className="text-slate-500 dark:text-slate-400 text-sm mt-2 max-w-xs text-center">
-                Загрузите файлы планов производства в разделе "Файлы", чтобы система могла выполнить автоматический расчет.
-              </p>
-            </motion.div>
-          )}
+          {/* Content tabs */}
           {activeTab === "economy" && (
             <motion.div
               key="economy"
@@ -1966,7 +2261,7 @@ export function AdminPanel({
                   >
                     <div className="flex flex-col md:grid md:grid-cols-12 gap-6 w-full">
                       {/* Main settings column */}
-                      <div className="col-span-12 lg:col-span-8 flex flex-col gap-6">
+                      <div className="col-span-12 flex flex-col gap-6">
                         
                         {/* Pricing table */}
                         <div className="bg-white dark:bg-[#1A1C19] rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col transition-colors">
@@ -2039,65 +2334,6 @@ export function AdminPanel({
 
                       </div>
 
-                      {/* Secondary settings column */}
-                      <div className="col-span-12 lg:col-span-4 flex flex-col gap-6">
-                        {/* Scrap and Remnant */}
-                        <div className="bg-white dark:bg-[#1A1C19] rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-6 flex flex-col gap-6">
-                          <h3 className="text-base font-medium text-[#1A1C19] dark:text-white">Базовые цены</h3>
-                          <div className="space-y-5">
-                            <div className="space-y-1.5">
-                              <label className="block text-xs font-medium text-[#43483F] dark:text-slate-400">Цена лома (руб/тн) БЕЗ НДС</label>
-                              <div className="relative">
-                                <input
-                                  type="text"
-                                  inputMode="decimal"
-                                  placeholder="20 000"
-                                  value={formatInputValue(scrap)}
-                                  onChange={(e) => handleNumericInput(e, setScrap)}
-                                  className="w-full bg-[#F0F4F4] dark:bg-slate-800/50 border-b border-slate-300 dark:border-slate-700 rounded-lg pl-3 pr-12 h-12 text-sm focus:border-slate-800 dark:focus:border-slate-200 focus:outline-none focus:ring-0 transition-colors dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500"
-                                />
-                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400 font-medium text-sm">руб</span>
-                              </div>
-                            </div>
-                            <div className="space-y-1.5">
-                              <label className="block text-xs font-medium text-[#43483F] dark:text-slate-400">Цена делового остатка (руб/тн) БЕЗ НДС</label>
-                              <div className="relative">
-                                <input
-                                  type="text"
-                                  inputMode="decimal"
-                                  placeholder="35 000"
-                                  value={formatInputValue(remnant)}
-                                  onChange={(e) => handleNumericInput(e, setRemnant)}
-                                  className="w-full bg-[#F0F4F4] dark:bg-slate-800/50 border-b border-slate-300 dark:border-slate-700 rounded-t-lg pl-3 pr-12 h-12 text-sm focus:border-slate-800 dark:focus:border-slate-200 focus:outline-none focus:ring-0 transition-colors dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500"
-                                />
-                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 font-medium text-sm">руб</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Add grade */}
-                        <div className="bg-white dark:bg-[#1A1C19] rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 p-6 flex flex-col gap-4">
-                          <h3 className="text-base font-medium text-[#1A1C19] dark:text-white">Новая марка стали</h3>
-                          <div className="flex flex-col gap-3">
-                            <input
-                              type="text"
-                              placeholder="Например: ст.50"
-                              value={newGrade}
-                              onChange={(e) => setNewGrade(e.target.value)}
-                              className="w-full bg-[#F0F4F4] dark:bg-slate-800/50 border-b border-slate-300 dark:border-slate-700 rounded-t-lg px-4 h-12 text-sm focus:border-slate-800 dark:focus:border-slate-200 focus:outline-none focus:ring-0 transition-colors dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500"
-                            />
-                            <button
-                              onClick={handleAddGrade}
-                              disabled={!newGrade.trim()}
-                              className="w-full bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-800 dark:text-white disabled:opacity-50 disabled:bg-slate-100 dark:disabled:bg-slate-800 flex items-center justify-center gap-2 rounded-full h-11 px-6 text-sm font-medium transition-colors border border-slate-200 dark:border-slate-600 shadow-sm"
-                            >
-                              <Plus className="w-5 h-5" />
-                              <span>Добавить</span>
-                            </button>
-                          </div>
-                        </div>
-                      </div>
                     </div>
                   </motion.div>
                 ) : (
@@ -2169,6 +2405,8 @@ export function AdminPanel({
           )}
         </AnimatePresence>
       </div>
+      <BatchManualModal isOpen={isBatchManualOpen} onClose={() => setIsBatchManualOpen(false)} />
+      <StockManualModal isOpen={isStockManualOpen} onClose={() => setIsStockManualOpen(false)} />
     </div>
   );
 }
