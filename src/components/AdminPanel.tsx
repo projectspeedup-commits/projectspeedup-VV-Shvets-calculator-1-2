@@ -497,7 +497,7 @@ export function AdminPanel({
               length = 8500;
             } else if (colMap.lengthIdx !== -1 && row[colMap.lengthIdx]) {
               const rawLength = String(row[colMap.lengthIdx]).trim().toUpperCase();
-              if (rawLength === "НД" || rawLength === "Н/Д") {
+              if (rawLength.includes("НД") || rawLength.includes("Н/Д") || rawLength.includes("Н.Д.")) {
                 lengthType = "НД";
               } else {
                 const lengthMatch = rawLength.match(/\d+/);
@@ -562,7 +562,7 @@ export function AdminPanel({
         let billetLength = 0;
         const totalTechCoef = item.type === "Шестигранник" ? 1.03 * 1.003 : 1.027 * 1.003;
 
-                if (item.lengthType === "НД") {
+        if (item.lengthType === "НД") {
           billetLength = 8500;
         } else {
           billetLength = item.length > 0 ? item.length : 6000;
@@ -769,7 +769,7 @@ export function AdminPanel({
             const ndMatch = nomClean.includes("НД");
             
             if (mdMatch) {
-              const val = mdMatch[1] === "8500" || !mdMatch[1] ? "8500" : mdMatch[1];
+              const val = mdMatch[1] === "6000" || !mdMatch[1] ? "6000" : mdMatch[1];
               lengthType = "МД " + val;
             }
 
@@ -1988,7 +1988,7 @@ export function AdminPanel({
                                       res.lengthType === "НД" ? "НД" : `МД ${res.length}`,
                                       String(res.weightTons).replace(".", ","),
                                       String(res.remainingToProcess.toFixed(3)).replace(".", ","),
-                                      "Круг г/к ГОСТ 2590-2006",
+                                      res.type === "Шестигранник" ? "Шестигранник г/к ГОСТ 2879-2006" : "Круг г/к ГОСТ 2590-2006",
                                       res.grade,
                                       String(res.billetDia).replace(".", ","),
                                       String(res.totalWeight.toFixed(3)).replace(".", ","),
@@ -2052,7 +2052,7 @@ export function AdminPanel({
                                       res.lengthType === "НД" ? "НД" : `МД ${res.length}`,
                                       String(res.weightTons).replace(".", ","),
                                       String(res.remainingToProcess.toFixed(3)).replace(".", ","),
-                                      "Круг г/к ГОСТ 2590-2006",
+                                      res.type === "Шестигранник" ? "Шестигранник г/к ГОСТ 2879-2006" : "Круг г/к ГОСТ 2590-2006",
                                       res.grade,
                                       String(res.billetDia).replace(".", ","),
                                       String(res.totalWeight.toFixed(3)).replace(".", ","),
@@ -2218,7 +2218,7 @@ export function AdminPanel({
                                       {res.remainingToProcess.toFixed(3)}
                                     </td>
                                     <td className={`px-5 py-3 whitespace-nowrap text-center text-slate-500`}>
-                                      Круг г/к ГОСТ 2590-2006
+                                      {res.type === "Шестигранник" ? "Шестигранник г/к ГОСТ 2879-2006" : "Круг г/к ГОСТ 2590-2006"}
                                     </td>
                                     <td className={`px-5 py-3 whitespace-nowrap text-center font-black text-slate-900 dark:text-white`}>
                                       {res.grade}
@@ -2370,7 +2370,7 @@ export function AdminPanel({
                                      res.lengthType === "НД" ? "НД" : `МД ${res.length}`,
                                      String(res.weightTons).replace(".", ","),
                                      String(res.remainingToProcess.toFixed(3)).replace(".", ","),
-                                     "Круг г/к ГОСТ 2590-2006",
+                                     res.type === "Шестигранник" ? "Шестигранник г/к ГОСТ 2879-2006" : "Круг г/к ГОСТ 2590-2006",
                                      res.grade,
                                      String(res.billetDia).replace(".", ","),
                                      String(res.totalWeight.toFixed(3)).replace(".", ","),
@@ -2435,7 +2435,7 @@ export function AdminPanel({
                                      res.lengthType === "НД" ? "НД" : `МД ${res.length}`,
                                      String(res.weightTons).replace(".", ","),
                                      String(res.remainingToProcess.toFixed(3)).replace(".", ","),
-                                     "Круг г/к ГОСТ 2590-2006",
+                                     res.type === "Шестигранник" ? "Шестигранник г/к ГОСТ 2879-2006" : "Круг г/к ГОСТ 2590-2006",
                                      res.grade,
                                      String(res.billetDia).replace(".", ","),
                                      String(res.totalWeight.toFixed(3)).replace(".", ","),
@@ -2564,7 +2564,7 @@ export function AdminPanel({
                                           <td className={`px-5 py-3 whitespace-nowrap text-center font-black text-slate-900 dark:text-white ${isSubRow ? 'opacity-40 grayscale' : ''}`}>{res.weightTons.toFixed(3)}</td>
                                           <td className={`px-5 py-3 whitespace-nowrap text-center font-bold text-sky-600 dark:text-sky-400 ${isSubRow ? 'opacity-40 grayscale' : ''}`}>{res.remainingToProcess.toFixed(3)}</td>
                                           <td className={`px-5 py-3 whitespace-nowrap text-center text-slate-500 ${isSubRow ? 'opacity-40 grayscale' : ''}`}>
-                                            Круг г/к ГОСТ 2590-2006
+                                            {res.type === "Шестигранник" ? "Шестигранник г/к ГОСТ 2879-2006" : "Круг г/к ГОСТ 2590-2006"}
                                           </td>
                                           <td className={`px-5 py-3 whitespace-nowrap text-center font-black text-slate-900 dark:text-white ${isSubRow ? 'opacity-40 grayscale' : ''}`}>{res.grade}</td>
                                           <td className={`px-5 py-3 whitespace-nowrap text-center font-black text-sky-600 dark:text-sky-400 ${isSubRow ? 'opacity-40 grayscale' : ''}`}>{parseFloat(res.billetDia.toFixed(2))}</td>

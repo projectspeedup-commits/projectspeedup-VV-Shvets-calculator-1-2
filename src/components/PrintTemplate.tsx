@@ -165,7 +165,7 @@ export function PrintTemplate({ reportData, orderWeight, selectedTarget }: Print
                <p className="font-bold text-[11px] uppercase mb-1">Сырье к закупке</p>
                <p className="text-[18px] font-black">{requiredWeight || "?"} <span className="text-[12px] font-normal">тонн</span></p>
                <div className="mt-3 w-full border-t border-black pt-2 text-[11px] leading-snug">
-                 <p>Круг г/к ГОСТ 2590-2006 ф{selectedRaw ? parseFloat(selectedRaw) : "?"} мм</p>
+                 <p>{profileTypeStr === "Шестигранник" ? "Шестигранник г/к ГОСТ 2879-2006" : "Круг г/к ГОСТ 2590-2006"} ф{selectedRaw ? parseFloat(selectedRaw) : "?"} мм</p>
                  <p className="font-bold">{formattedGrade}</p>
                  <p>{gost}</p>
                </div>

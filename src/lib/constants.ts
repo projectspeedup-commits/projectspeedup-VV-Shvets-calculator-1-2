@@ -109,10 +109,8 @@ export const getProfileGost = (type: "round" | "hex") => {
 export const getLengthLabel = (length: string) => {
   const L = Number(length);
   if (isNaN(L) || !L) return "НД";
-  if (L >= 2500 && L <= 7000 && L !== 6000 && L !== 4300 && L !== 5560) {
-      // Common ND range
-      return "НД";
-  }
+  // Only auto-convert to ND if it's very likely to be a range or unset
+  if (length.toLowerCase().includes("нд") || length === "0") return "НД";
   return `МД ${L}`;
 };
 
