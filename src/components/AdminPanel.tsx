@@ -79,7 +79,7 @@ export function AdminPanel({
   initialTab = "economy",
   isPurchasingMode = false,
 }: AdminPanelProps) {
-  const [activeTab, setActiveTab] = useState<"economy" | "supply">(initialTab);
+  const [activeTab, setActiveTab] = useState<"economy" | "supply" | "help">(initialTab);
   const [rawPrices, setRawPrices] = useState<Record<string, { md: string; nd: string }>>(initialRawPrices);
   const [scrap, setScrap] = useState(initialScrap);
   const [remnant, setRemnant] = useState(initialRemnant);
@@ -373,6 +373,7 @@ export function AdminPanel({
             remaining: -1,
             shippingDate: -1, 
             internalNo: -1,
+            lengthIdx: -1,
           };
 
           // Dynamically find header row and map columns
@@ -405,6 +406,7 @@ export function AdminPanel({
                 if (cellStr.includes("размер") || cellStr.includes("диаметр")) colMap.size = colIdx;
                 if (colMap.weight === -1 && (cellStr.includes("кол-во") || cellStr.includes("количество") || cellStr.includes("вес") || cellStr.includes("масса") || cellStr.includes("кг") || cellStr.includes("тн"))) colMap.weight = colIdx;
                 if (colMap.shippingDate === -1 && (cellStr.includes("отгруз") || cellStr.includes("дата"))) colMap.shippingDate = colIdx;
+                if (cellStr.includes("длина")) colMap.lengthIdx = colIdx;
               });
               break;
             }
@@ -477,18 +479,31 @@ export function AdminPanel({
             let length = 6000;
             let lengthType: "НД" | "МД" = "МД";
             
-            const lengthMatch = nomenclature.match(/х\s*(\d+)/i);
-            const nomClean = nomenclature.toUpperCase().replace(/\s/g, '');
-            const lenTypeMatch = nomClean.match(/(М\/Д|МД|Н\/Д|НД)/);
-            const isND = (lenTypeMatch && (lenTypeMatch[1] === "НД" || lenTypeMatch[1] === "Н/Д")) || nomClean.includes("НД") || nomClean.includes("Н.Д.") || nomClean.includes("Н/Д");
-            
-            if (lengthMatch && !isND) {
-              length = parseInt(lengthMatch[1]);
-              if (isNaN(length) || length <= 0) length = 6000;
-            } else if (isND) {
-              length = 6000; // Default to 6000 for calculations
+            if (colMap.lengthIdx !== -1 && row[colMap.lengthIdx]) {
+              const rawLength = String(row[colMap.lengthIdx]).trim().toUpperCase();
+              if (rawLength === "НД" || rawLength === "Н/Д") {
+                lengthType = "НД";
+              } else {
+                const parsedLen = parseInt(rawLength, 10);
+                if (!isNaN(parsedLen) && parsedLen > 0) {
+                  length = parsedLen;
+                  lengthType = "МД";
+                }
+              }
+            } else {
+              const lengthMatch = nomenclature.match(/х\s*(\d+)/i);
+              const nomClean = nomenclature.toUpperCase().replace(/\s/g, '');
+              const lenTypeMatch = nomClean.match(/(М\/Д|МД|Н\/Д|НД)/);
+              const isND = (lenTypeMatch && (lenTypeMatch[1] === "НД" || lenTypeMatch[1] === "Н/Д")) || nomClean.includes("НД") || nomClean.includes("Н.Д.") || nomClean.includes("Н/Д");
+              
+              if (lengthMatch && !isND) {
+                length = parseInt(lengthMatch[1]);
+                if (isNaN(length) || length <= 0) length = 6000;
+              } else if (isND) {
+                length = 6000; // Default to 6000 for calculations
+              }
+              lengthType = isND ? "НД" : "МД";
             }
-            lengthType = isND ? "НД" : "МД";
 
             allExtractedData.push({
               id: Math.random().toString(36).substring(7),
@@ -993,6 +1008,16 @@ export function AdminPanel({
            <span className="text-[10px] font-bold tracking-tight">Снабжение</span>
          </button>
 
+         <button 
+           onClick={() => setActiveTab("help")}
+           className={`flex flex-col items-center justify-center flex-1 h-full py-1 transition-all ${activeTab === 'help' ? 'text-slate-900 dark:text-white' : 'text-slate-400 dark:text-slate-500'}`}
+         >
+           <div className={`px-4 py-1 rounded-full mb-1 transition-colors ${activeTab === 'help' ? 'bg-slate-100 dark:bg-slate-800' : ''}`}>
+             <BookOpen className="w-5 h-5" />
+           </div>
+           <span className="text-[10px] font-bold tracking-tight">Справка</span>
+         </button>
+
          <div className="w-[1px] h-8 bg-slate-100 dark:bg-slate-800 mx-1"></div>
 
          <button onClick={toggleTheme} className="flex flex-col items-center justify-center flex-1 h-full py-1 text-slate-400 dark:text-slate-500 active:scale-95 transition-all">
@@ -1038,6 +1063,16 @@ export function AdminPanel({
                <Package className="w-6 h-6" strokeWidth={2} />
              </div>
              <span className="text-[11px] font-medium tracking-wide">Снабжение</span>
+           </button>
+
+           <button 
+             onClick={() => setActiveTab("help")}
+             className={`w-full flex flex-col items-center justify-center py-4 transition-all active:scale-95 group ${activeTab === 'help' ? 'text-slate-900 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'}`}
+           >
+             <div className={`px-5 py-1.5 mb-1.5 rounded-full transition-colors ${activeTab === 'help' ? 'bg-slate-200 dark:bg-slate-700' : 'group-hover:bg-slate-100 dark:group-hover:bg-slate-800'}`}>
+               <BookOpen className="w-6 h-6" strokeWidth={2} />
+             </div>
+             <span className="text-[11px] font-medium tracking-wide">Справка</span>
            </button>
 
            <button onClick={toggleTheme} className="w-full flex flex-col items-center justify-center py-4 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-all active:scale-95 group">
@@ -3022,6 +3057,155 @@ export function AdminPanel({
                   </motion.div>
                 )}
               </AnimatePresence>
+            </motion.div>
+          )}
+
+          {activeTab === "help" && (
+            <motion.div
+              key="help"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2 }}
+              className="flex flex-col gap-8"
+            >
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-2xl sm:text-3xl font-normal tracking-tight text-[#1A1C19] dark:text-white">
+                    Обучение и Инструкции
+                  </h2>
+                  <p className="text-sm text-[#43483F] dark:text-slate-400 mt-2 max-w-2xl">
+                    Руководство пользователя, алгоритмы работы и требования к форматам загружаемых данных.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Intro & Benefits */}
+                <div className="bg-white dark:bg-[#1A1C19] border border-slate-200 dark:border-slate-800 rounded-3xl p-8 shadow-sm flex flex-col gap-4">
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <Info className="w-5 h-5 text-sky-500" />
+                    О Программном Комплексе
+                  </h3>
+                  <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                    Данный программный комплекс предназначен для автоматизации процессов снабжения, расчетов потребности в заготовке и оценки экономической рентабельности.
+                    Система объединяет данные о заказах покупателей (потребностях) и складских остатках, позволяя быстро и точно вычислять дефицит сырья.
+                  </p>
+                  
+                  <div className="mt-4">
+                    <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-3 uppercase tracking-wider">Ключевые преимущества</h4>
+                    <ul className="space-y-3">
+                      <li className="flex items-start gap-3">
+                        <Check className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
+                        <span className="text-sm text-slate-600 dark:text-slate-400"><b>Мгновенный расчет КИМ:</b> автоматическое определение коэффициента использования металла на основе технологических нормативов.</span>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <Check className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
+                        <span className="text-sm text-slate-600 dark:text-slate-400"><b>Связь Потребности и Склада:</b> алгоритм сам подбирает подходящую заготовку из наличия (по марке, профилю, размеру и длине) и вычисляет дефицит.</span>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <Check className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
+                        <span className="text-sm text-slate-600 dark:text-slate-400"><b>Гибкий экспорт данных:</b> возможность в один клик скопировать результаты в Google Sheets или скачать XLSX файл.</span>
+                      </li>
+                      <li className="flex items-start gap-3">
+                        <Check className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
+                        <span className="text-sm text-slate-600 dark:text-slate-400"><b>Оптимизация свободных остатков:</b> прозрачно выделяет объем заготовки, который не покрывает существующие заказы и может быть реализован.</span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+
+                {/* File Formats */}
+                <div className="bg-white dark:bg-[#1A1C19] border border-slate-200 dark:border-slate-800 rounded-3xl p-8 shadow-sm flex flex-col gap-4">
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-amber-500" />
+                    Требования к файлам
+                  </h3>
+                  <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                    Для корректной работы системы, загружаемые Excel файлы должны содержать определенные столбцы. Порядок столбцов не важен, главное точное совпадение названий.
+                  </p>
+                  
+                  <div className="mt-4 space-y-6">
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 mb-2 uppercase tracking-wider bg-slate-100 dark:bg-slate-800 w-fit px-3 py-1 rounded-lg">Файл: Потребности (Заказы)</h4>
+                      <p className="text-xs text-slate-500 mb-2">Убедитесь, что в файле присутствуют следующие столбцы с точными названиями, по которым система распознает данные.</p>
+                      <div className="flex flex-wrap gap-2">
+                        {["Внутренняя нумерация", "Дата отгрузки", "Клиент", "Номенклатура", "№ заказа", "Профиль", "Марка стали", "Размер", "Кол-во", "Остаток к выполнению", "Длина конечной продукции"].map(col => (
+                          <span key={col} className="px-2 py-1 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded text-xs font-mono text-slate-600 dark:text-slate-400">
+                            {col}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 mb-2 uppercase tracking-wider bg-slate-100 dark:bg-slate-800 w-fit px-3 py-1 rounded-lg">Файл: Складские Остатки</h4>
+                      <p className="text-xs text-slate-500 mb-2">Обязательные колонки:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {["Исходная Номенклатура", "Профиль", "НТД", "Марка стали", "Размер", "Длина", "Конечный остаток тн."].map(col => (
+                          <span key={col} className="px-2 py-1 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded text-xs font-mono text-slate-600 dark:text-slate-400">
+                            {col}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Workflow Algorithm */}
+                <div className="bg-white dark:bg-[#1A1C19] border border-slate-200 dark:border-slate-800 rounded-3xl p-8 shadow-sm flex flex-col gap-4 md:col-span-2">
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <Activity className="w-5 h-5 text-indigo-500" />
+                    Алгоритм работы для начинающих
+                  </h3>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 mt-4 relative">
+                    {/* Step 1 */}
+                    <div className="flex flex-col gap-3 relative z-10">
+                      <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center font-black text-slate-900 dark:text-white text-lg border-2 border-white dark:border-[#1A1C19] shadow-sm">
+                        1
+                      </div>
+                      <h4 className="font-bold text-sm text-slate-800 dark:text-slate-200">Подготовка данных</h4>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                        Выгрузите из учетной системы (например, 1C) файлы с текущими заказами и складскими остатками в формате Excel (.xlsx, .xls) или CSV.
+                      </p>
+                    </div>
+
+                    {/* Step 2 */}
+                    <div className="flex flex-col gap-3 relative z-10">
+                      <div className="w-10 h-10 rounded-full bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center font-black text-sky-600 dark:text-sky-400 text-lg border-2 border-white dark:border-[#1A1C19] shadow-sm">
+                        2
+                      </div>
+                      <h4 className="font-bold text-sm text-slate-800 dark:text-slate-200">Загрузка файлов</h4>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                        Перейдите на вкладку <b>«Снабжение»</b> -&gt; <b>«Файлы»</b>. Перетащите скачанные файлы в соответствующие зоны загрузки или кликните для выбора.
+                      </p>
+                    </div>
+
+                    {/* Step 3 */}
+                    <div className="flex flex-col gap-3 relative z-10">
+                      <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center font-black text-indigo-600 dark:text-indigo-400 text-lg border-2 border-white dark:border-[#1A1C19] shadow-sm">
+                        3
+                      </div>
+                      <h4 className="font-bold text-sm text-slate-800 dark:text-slate-200">Анализ потребностей</h4>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                        В разделе <b>«Потребность»</b> комплекс автоматически распознает профили, марки стали и размеры. Здесь можно оценить общий дефицит заготовки для выполнения всех заказов без учета наличия.
+                      </p>
+                    </div>
+
+                    {/* Step 4 */}
+                    <div className="flex flex-col gap-3 relative z-10">
+                      <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center font-black text-emerald-600 dark:text-emerald-400 text-lg border-2 border-white dark:border-[#1A1C19] shadow-sm">
+                        4
+                      </div>
+                      <h4 className="font-bold text-sm text-slate-800 dark:text-slate-200">Расчет с учетом склада</h4>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                        В разделе <b>«Расчет с учетом наличия»</b> программа сопоставит потребность с текущими остатками (раздел <b>«Наличие»</b>), вычтет имеющийся объем и покажет реальный дефицит к закупке.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
