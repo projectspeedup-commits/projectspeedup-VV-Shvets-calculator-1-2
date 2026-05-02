@@ -49,7 +49,7 @@ export function CalculatorApp({
   const [orderWeight, setOrderWeight] = useState("");
 
   const [lengthInput, setLengthInput] = useState({ value: "6000", source: "raw" });
-  const [orderedLength, setOrderedLength] = useState("НД");
+  const [orderedLength, setOrderedLength] = useState("6000");
 
   const [frontCoef, setFrontCoef] = useState("1.027");
   const [backCoef, setBackCoef] = useState("1.003");
