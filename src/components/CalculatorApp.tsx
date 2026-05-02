@@ -49,7 +49,7 @@ export function CalculatorApp({
   const [orderWeight, setOrderWeight] = useState("");
 
   const [lengthInput, setLengthInput] = useState({ value: "6000", source: "raw" });
-  const [orderedLength, setOrderedLength] = useState("6000");
+  const [orderedLength, setOrderedLength] = useState("НД");
 
   const [frontCoef, setFrontCoef] = useState("1.027");
   const [backCoef, setBackCoef] = useState("1.003");
@@ -267,26 +267,51 @@ export function CalculatorApp({
 
   const optimalBilletLengths = useMemo(() => {
     if (!orderedLength || !currentDrawCoef || !totalTechCoef) return [];
+    
+    let isND = orderedLength.toUpperCase().includes("НД") || orderedLength.toUpperCase().includes("Н/Д");
     const targetPiece = Number(orderedLength);
-    if (isNaN(targetPiece) || targetPiece <= 0) return [];
+    
+    if (!isND && (isNaN(targetPiece) || targetPiece <= 0)) return [];
 
     const draw = currentDrawCoef;
     const tech = totalTechCoef;
-    
     const options = [];
-    // Пробуем разное количество деталей (n), чтобы найти подходящие длины заготовок
-    for (let n = 1; n <= 60; n++) {
-      const idealBillet = (n * targetPiece * tech) / draw;
-      // Округляем вверх до ближайших 100 мм (согласно запросу)
-      const roundedBillet = Math.ceil(idealBillet / 100) * 100;
-      
-      const maxBillet = Math.floor(8400 / draw);
-      if (roundedBillet >= 4000 && roundedBillet <= Math.min(8800, maxBillet)) {
-        const estUseful = (roundedBillet * draw) / tech;
-        const scrap = estUseful - (n * targetPiece);
-        // Добавляем только если остаток положительный (поместится)
-        if (scrap >= 0) {
-          options.push({ n, billetLength: roundedBillet, scrap });
+    const maxBillet = Math.floor(8400 / draw);
+    const maxAllowedBillet = Math.min(8500, maxBillet);
+
+    if (isND) {
+       for (let b = 4000; b <= maxAllowedBillet; b += 100) {
+          const estUseful = (b * draw) / tech;
+          let bestScrapForB = 999999;
+          let bestN = 0;
+          for (let i = 1; i <= 20; i++) {
+             const optLen = Math.floor(estUseful / i) - 5;
+             if (optLen >= 3000 && optLen <= 6000) {
+                 const scrap = estUseful - (i * optLen);
+                 if (scrap >= 0 && scrap < bestScrapForB) {
+                     bestScrapForB = scrap;
+                     bestN = i;
+                 }
+             }
+          }
+          if (bestN > 0) {
+             options.push({ n: bestN, billetLength: b, scrap: bestScrapForB });
+          }
+       }
+    } else {
+      // Пробуем разное количество деталей (n), чтобы найти подходящие длины заготовок
+      for (let n = 1; n <= 60; n++) {
+        const idealBillet = (n * targetPiece * tech) / draw;
+        // Округляем вверх до ближайших 100 мм (согласно запросу)
+        const roundedBillet = Math.ceil(idealBillet / 100) * 100;
+        
+        if (roundedBillet >= 4000 && roundedBillet <= maxAllowedBillet) {
+          const estUseful = (roundedBillet * draw) / tech;
+          const scrap = estUseful - (n * targetPiece);
+          // Добавляем только если остаток положительный (поместится)
+          if (scrap >= 0) {
+            options.push({ n, billetLength: roundedBillet, scrap });
+          }
         }
       }
     }
@@ -644,7 +669,7 @@ export function CalculatorApp({
     setSelectedTarget(calc.selectedTarget);
     setSelectedRaw(calc.selectedRaw);
     setOrderWeight(calc.orderWeight);
-    setOrderedLength(calc.orderedLength || "6000");
+    setOrderedLength(calc.orderedLength || "НД");
     setSellPrice(calc.sellPrice || "");
     
     if (calc.lengthInputValue && calc.lengthInputSource) {
@@ -664,7 +689,7 @@ export function CalculatorApp({
     setSelectedRaw("");
     setOrderWeight("");
     setLengthInput({ value: "6000", source: "raw" });
-    setOrderedLength("6000");
+    setOrderedLength("НД");
     setSellPrice("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -1049,7 +1074,7 @@ export function CalculatorApp({
                             </div>
                             <div className="flex flex-col">
                               <span className="text-[9px] uppercase font-semibold text-slate-400 dark:text-slate-500 leading-none mb-0.5">Заказ:</span>
-                              <span className="font-bold text-slate-700 dark:text-slate-200">{calc.orderedLength || "6000"} мм</span>
+                              <span className="font-bold text-slate-700 dark:text-slate-200">{calc.orderedLength || "НД"} мм</span>
                             </div>
                             <div className="flex flex-col text-right">
                               <span className="text-[9px] uppercase font-semibold text-[#0D652D] dark:text-green-500 leading-none mb-0.5">Полезная:</span>
@@ -1183,7 +1208,7 @@ export function CalculatorApp({
               </div>
 
               {optimalBilletLengths.length > 0 && (
-                <div className={`bg-indigo-600/10 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 px-3 py-2 rounded-2xl flex items-center gap-4 transition-all ${orderedLength !== '6000' && orderedLength !== '' ? 'ring-2 ring-indigo-500/30 shadow-[0_0_15px_rgba(99,102,241,0.2)]' : ''}`}>
+                <div className={`bg-indigo-600/10 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 px-3 py-2 rounded-2xl flex items-center gap-4 transition-all ${orderedLength !== 'НД' && orderedLength !== '6000' && orderedLength !== '' ? 'ring-2 ring-indigo-500/30 shadow-[0_0_15px_rgba(99,102,241,0.2)]' : ''}`}>
                   <div className="flex items-center gap-2">
                     <div className="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center text-white shrink-0 shadow-sm">
                       <Ruler className="w-3.5 h-3.5" />

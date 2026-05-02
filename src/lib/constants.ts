@@ -109,10 +109,11 @@ export const getProfileGost = (type: "round" | "hex") => {
 export const getLengthLabel = (length: string) => {
   const L = Number(length);
   if (isNaN(L) || !L) return "НД";
-  if (L === 6000) return "МД 6000";
-  if (L >= 4000 && L < 6000) return "НД 4000-6000 мм";
-  if (L >= 3000 && L < 4000) return "НД 3000-6000 мм";
-  return "НД";
+  if (L >= 2500 && L <= 7000 && L !== 6000 && L !== 4300 && L !== 5560) {
+      // Common ND range
+      return "НД";
+  }
+  return `МД ${L}`;
 };
 
 function generateRoundData(start: number, end: number, step: number, rawSizes: number[]) {

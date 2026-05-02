@@ -127,7 +127,7 @@ export function StockManualModal({ isOpen, onClose }: StockManualModalProps) {
                   <li className="flex items-start gap-3">
                      <div className="mt-1.5 w-5 h-5 rounded-md bg-sky-500/20 text-sky-400 flex items-center justify-center text-xs font-bold shrink-0">4</div>
                     <p className="text-xs sm:text-sm font-medium leading-relaxed opacity-90 text-slate-200">
-                      <strong className="text-white">Длина (Н/Д, М/Д):</strong> система извлекает числовое значение длины. Если в названии указано <strong className="text-sky-400">НД</strong> или пометка длины отсутствует, устанавливается значение <strong className="text-sky-400">6000</strong>.
+                      <strong className="text-white">Длина (Н/Д, М/Д):</strong> система извлекает числовое значение длины. Если в названии указано <strong className="text-sky-400">НД</strong> или пометка длины отсутствует, устанавливается значение <strong className="text-sky-400">8500</strong>.
                     </p>
                   </li>
                   <li className="flex items-start gap-3 border-t border-slate-700/50 pt-4 mt-2">

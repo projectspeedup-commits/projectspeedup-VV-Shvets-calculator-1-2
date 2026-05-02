@@ -36,6 +36,7 @@ interface CalculationResult {
   totalCost: number;
   optimizedBilletLength?: number;
   optimizedKim?: number;
+  initialScrapTons?: number;
 }
 
 interface AdminPanelProps {
@@ -135,7 +136,7 @@ export function AdminPanel({
         if (item.lengthType === "НД") {
           for (let i = 1; i <= 20; i++) {
             const optLen = Math.floor(newUsefulLen / i) - 5;
-            if (optLen >= 2500 && optLen <= 6500) {
+            if (optLen >= 3000 && optLen <= 6000) {
               newPcs = i;
               newActualUL = newPcs * optLen;
               break;
@@ -166,6 +167,7 @@ export function AdminPanel({
           drawLength: newDrawLen,
           usefulLength: newUsefulLen,
           actualUsefulLength: newActualUL,
+          pcsPerBillet: newPcs,
           kim: newKim,
           totalWeight: newTotalWeight,
           billetCount: newBilletCount,
@@ -242,11 +244,19 @@ export function AdminPanel({
         
         let lengthMatch = false;
         if (reqLengthType === "НД") {
-          if (stockLength.includes("Н/Д") || stockLength === "НД" || (stockLength.includes("МД") && stockLength.includes("6000"))) {
+          if (stockLength.includes("Н/Д") || stockLength.includes("НД")) {
             lengthMatch = true;
+          } else if (stockLength.includes("МД")) {
+            const numMatch = stockLength.match(/\d+/);
+            if (numMatch) {
+              const len = parseInt(numMatch[0]);
+              if (len <= 8500) lengthMatch = true;
+            } else {
+              lengthMatch = true;
+            }
           }
         } else if (reqLengthType.startsWith("МД")) {
-          if (stockLength.includes("Н/Д") || stockLength === "НД" || stockLength.includes("МД")) {
+          if (stockLength.includes("Н/Д") || stockLength.includes("НД") || stockLength.includes("МД")) {
             lengthMatch = true;
           }
         } else {
@@ -267,8 +277,8 @@ export function AdminPanel({
             if (aIsExact && !bIsExact) return -1;
             if (!aIsExact && bIsExact) return 1;
             
-            const aIsND = lenA.includes("Н/Д") || lenA === "НД";
-            const bIsND = lenB.includes("Н/Д") || lenB === "НД";
+            const aIsND = lenA.includes("Н/Д") || lenA.includes("НД");
+            const bIsND = lenB.includes("Н/Д") || lenB.includes("НД");
             if (aIsND && !bIsND) return -1;
             if (!aIsND && bIsND) return 1;
          }
@@ -476,33 +486,35 @@ export function AdminPanel({
             }
             if (isNaN(diameter) || diameter < 0) diameter = 0;
             
+            const nomCleanForLen = nomenclature.toUpperCase().replace(/\s/g, '');
+            const isNomND = nomCleanForLen.includes("НД") || nomCleanForLen.includes("Н.Д.") || nomCleanForLen.includes("Н/Д");
+                
             let length = 6000;
             let lengthType: "НД" | "МД" = "МД";
             
-            if (colMap.lengthIdx !== -1 && row[colMap.lengthIdx]) {
+            if (isNomND) {
+              lengthType = "НД";
+              length = 8500;
+            } else if (colMap.lengthIdx !== -1 && row[colMap.lengthIdx]) {
               const rawLength = String(row[colMap.lengthIdx]).trim().toUpperCase();
               if (rawLength === "НД" || rawLength === "Н/Д") {
                 lengthType = "НД";
               } else {
-                const parsedLen = parseInt(rawLength, 10);
-                if (!isNaN(parsedLen) && parsedLen > 0) {
-                  length = parsedLen;
-                  lengthType = "МД";
+                const lengthMatch = rawLength.match(/\d+/);
+                if (lengthMatch) {
+                  const parsedLen = parseInt(lengthMatch[0], 10);
+                  if (!isNaN(parsedLen) && parsedLen > 0) {
+                    length = parsedLen;
+                    lengthType = "МД";
+                  }
                 }
               }
             } else {
               const lengthMatch = nomenclature.match(/х\s*(\d+)/i);
-              const nomClean = nomenclature.toUpperCase().replace(/\s/g, '');
-              const lenTypeMatch = nomClean.match(/(М\/Д|МД|Н\/Д|НД)/);
-              const isND = (lenTypeMatch && (lenTypeMatch[1] === "НД" || lenTypeMatch[1] === "Н/Д")) || nomClean.includes("НД") || nomClean.includes("Н.Д.") || nomClean.includes("Н/Д");
-              
-              if (lengthMatch && !isND) {
+              if (lengthMatch) {
                 length = parseInt(lengthMatch[1]);
                 if (isNaN(length) || length <= 0) length = 6000;
-              } else if (isND) {
-                length = 6000; // Default to 6000 for calculations
               }
-              lengthType = isND ? "НД" : "МД";
             }
 
             allExtractedData.push({
@@ -551,9 +563,9 @@ export function AdminPanel({
         const totalTechCoef = item.type === "Шестигранник" ? 1.03 * 1.003 : 1.027 * 1.003;
 
                 if (item.lengthType === "НД") {
-          billetLength = 6000;
+          billetLength = 8500;
         } else {
-          billetLength = 6000; // Default billet length is 6000, optimization is suggested via button
+          billetLength = item.length > 0 ? item.length : 6000;
         }
 
         const drawLength = billetLength * drawRatio;
@@ -566,7 +578,7 @@ export function AdminPanel({
         if (item.lengthType === "НД") {
           for (let i = 1; i <= 20; i++) {
             const optLen = Math.floor(usefulLength / i) - 5;
-            if (optLen >= 2500 && optLen <= 6500) {
+            if (optLen >= 3000 && optLen <= 6000) {
               piecesCount = i;
               actualUsefulLength = piecesCount * optLen;
               break;
@@ -600,6 +612,32 @@ export function AdminPanel({
               optimizedBilletLength = l;
             }
           }
+        } else if (item.lengthType === "НД") {
+          const MIN_B = 4000;
+          const MAX_B = 8500;
+          const STEP = 100;
+          
+          for (let l = MIN_B; l <= MAX_B; l += STEP) {
+            const dL = l * drawRatio;
+            const uL = dL / totalTechCoef;
+            let pCount = 0;
+            let aUL = 0;
+            for (let i = 1; i <= 20; i++) {
+              const optLen = Math.floor(uL / i) - 5;
+              if (optLen >= 3000 && optLen <= 6000) {
+                pCount = i;
+                aUL = pCount * optLen;
+                break;
+              }
+            }
+            if (pCount === 0) continue;
+            const k = dL > 0 ? aUL / dL : 0;
+            
+            if (k > optimizedKim + 0.005) { // Suggest only if improvement > 0.5%
+              optimizedKim = k;
+              optimizedBilletLength = l;
+            }
+          }
         }
         // ----------------------------------------------
 
@@ -618,6 +656,8 @@ export function AdminPanel({
         const basePrice = parseFloat(gradePrices.nd || "0");
         const price = item.lengthType === "МД" ? basePrice * 1.06 : basePrice;
         const totalCost = totalWeight * price;
+        const initialLeftovers = item.lengthType === "НД" ? 0 : (usefulLength - ((piecesCount || 0) * item.length));
+        const initialScrapTons = drawLength > 0 ? (initialLeftovers / drawLength) * totalWeight : 0;
 
         return {
           ...item,
@@ -636,7 +676,8 @@ export function AdminPanel({
           price,
           totalCost,
           optimizedBilletLength,
-          optimizedKim
+          optimizedKim,
+          initialScrapTons
         } as CalculationResult;
       });
 
@@ -720,7 +761,7 @@ export function AdminPanel({
             const nomUpper = rawNom.toUpperCase();
             const nomClean = nomUpper.replace(/\s/g, '');
             
-            let lengthType = "Н/Д";
+            let lengthType = "НД";
             
             // Парсинг М/Д, МД, Н/Д
             const mdMatch = nomClean.match(/(?:М\/Д|МД)(\d+)?/);
@@ -728,7 +769,7 @@ export function AdminPanel({
             const ndMatch = nomClean.includes("НД");
             
             if (mdMatch) {
-              const val = mdMatch[1] === "6000" || !mdMatch[1] ? "6000" : mdMatch[1];
+              const val = mdMatch[1] === "8500" || !mdMatch[1] ? "8500" : mdMatch[1];
               lengthType = "МД " + val;
             }
 
@@ -1882,23 +1923,26 @@ export function AdminPanel({
                                   </div>
                                 </div>
                                 
-                                <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-800/30 border border-slate-100 dark:border-slate-800/50 p-3 rounded-xl transition-colors hover:bg-amber-50 dark:hover:bg-slate-800">
-                                  <div className="flex flex-col">
-                                    <span className="text-slate-500 dark:text-slate-400 font-bold text-[9px] uppercase tracking-wider mb-0.5">Деловой остаток</span>
-                                    <span className="text-amber-600 dark:text-amber-500 font-black text-[13px]">
+                                <div className="bg-slate-50 dark:bg-slate-800/30 border border-slate-100 dark:border-slate-800/50 p-3 rounded-xl transition-colors hover:bg-amber-50 dark:hover:bg-slate-800 flex flex-col gap-2">
+                                  <div className="flex justify-between items-center pb-2 border-b border-slate-200 dark:border-slate-700/50">
+                                    <span className="text-slate-500 dark:text-slate-400 font-bold text-[9px] uppercase tracking-wider">Деловой остаток</span>
+                                    <div className="flex flex-col items-end">
+                                      <span className="text-slate-400 font-medium text-[9px] uppercase tracking-widest mb-0.5">Текущая доля</span>
+                                      <span className="text-slate-700 dark:text-slate-200 font-bold text-[13px]">
+                                        {((calculationResults.reduce((acc, curr) => {
+                                          const leftovers = curr.lengthType === "НД" ? 0 : (curr.usefulLength - (curr.pcsPerBillet * curr.length));
+                                          return acc + (curr.drawLength > 0 ? (leftovers / curr.drawLength) * curr.totalWeight : 0);
+                                        }, 0) / (calculationResults.reduce((acc, curr) => acc + curr.totalWeight, 0) || 1)) * 100).toFixed(1)}%
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <div className="flex justify-between items-center text-[13px] pt-1">
+                                    <span className="text-slate-600 dark:text-slate-300 font-bold">По факту:</span>
+                                    <span className="text-amber-600 dark:text-amber-500 font-black">
                                       {calculationResults.reduce((acc, curr) => {
                                         const leftovers = curr.lengthType === "НД" ? 0 : (curr.usefulLength - (curr.pcsPerBillet * curr.length));
                                         return acc + (curr.drawLength > 0 ? (leftovers / curr.drawLength) * curr.totalWeight : 0);
-                                      }, 0).toFixed(3)} <span className="font-medium text-[9px] text-amber-600/60 uppercase">тн</span>
-                                    </span>
-                                  </div>
-                                  <div className="flex flex-col items-end">
-                                    <span className="text-slate-400 font-medium text-[9px] uppercase tracking-widest mb-0.5">Доля</span>
-                                    <span className="text-slate-700 dark:text-slate-200 font-bold text-[13px]">
-                                      {((calculationResults.reduce((acc, curr) => {
-                                        const leftovers = curr.lengthType === "НД" ? 0 : (curr.usefulLength - (curr.pcsPerBillet * curr.length));
-                                        return acc + (curr.drawLength > 0 ? (leftovers / curr.drawLength) * curr.totalWeight : 0);
-                                      }, 0) / (calculationResults.reduce((acc, curr) => acc + curr.totalWeight, 0) || 1)) * 100).toFixed(1)}%
+                                      }, 0).toFixed(3)} <span className="font-medium text-[9px] uppercase">тн</span>
                                     </span>
                                   </div>
                                 </div>
@@ -1941,7 +1985,7 @@ export function AdminPanel({
                                       res.type || "",
                                       res.grade || "",
                                       String(res.diameter).replace(".", ","),
-                                      res.lengthType === "НД" ? "НД (3000-6000)" : `МД ${res.length}`,
+                                      res.lengthType === "НД" ? "НД" : `МД ${res.length}`,
                                       String(res.weightTons).replace(".", ","),
                                       String(res.remainingToProcess.toFixed(3)).replace(".", ","),
                                       "Круг г/к ГОСТ 2590-2006",
@@ -2005,14 +2049,14 @@ export function AdminPanel({
                                       res.type || "",
                                       res.grade || "",
                                       String(res.diameter).replace(".", ","),
-                                      res.lengthType === "НД" ? "НД (3000-6000)" : `МД ${res.length}`,
+                                      res.lengthType === "НД" ? "НД" : `МД ${res.length}`,
                                       String(res.weightTons).replace(".", ","),
                                       String(res.remainingToProcess.toFixed(3)).replace(".", ","),
                                       "Круг г/к ГОСТ 2590-2006",
                                       res.grade,
                                       String(res.billetDia).replace(".", ","),
                                       String(res.totalWeight.toFixed(3)).replace(".", ","),
-                                      res.lengthType === "НД" ? "НД (3000-6000)" : `МД ${res.billetLength}`,
+                                      res.lengthType === "НД" ? "НД" : `МД ${res.billetLength}`,
                                       String(res.drawLength > 0 ? ((res.techEnds / res.drawLength) * res.totalWeight).toFixed(3) : 0).replace(".", ","),
                                       String(res.lengthType === "НД" || res.drawLength <= 0 ? 0 : ((res.usefulLength - (res.pcsPerBillet * res.length)) / res.drawLength * res.totalWeight).toFixed(3)).replace(".", ",")
                                     ];
@@ -2165,7 +2209,7 @@ export function AdminPanel({
                                       {parseFloat(res.diameter.toFixed(2))}
                                     </td>
                                     <td className="px-5 py-3 whitespace-nowrap text-center text-slate-800 dark:text-slate-200 font-medium">
-                                      {res.lengthType === "НД" ? "НД (3000-6000)" : `МД ${res.length}`}
+                                      {res.lengthType === "НД" ? "НД" : `МД ${res.length}`}
                                     </td>
                                     <td className={`px-5 py-3 whitespace-nowrap text-center font-black text-slate-900 dark:text-white`}>
                                       {res.weightTons.toFixed(3)}
@@ -2210,8 +2254,22 @@ export function AdminPanel({
                                                   const newBilletLength = res.optimizedBilletLength;
                                                   const newDrawLen = newBilletLength * item.drawRatio;
                                                   const newUsefulLen = newDrawLen / (item.type === "Шестигранник" ? 1.03 * 1.003 : 1.027 * 1.003);
-                                                  const newPcs = Math.floor(newUsefulLen / item.length);
-                                                  const newActualUL = newPcs * item.length;
+                                                  let newPcs = 0;
+                                                  let newActualUL = 0;
+                                                  if (item.lengthType === "НД") {
+                                                    for (let i = 1; i <= 20; i++) {
+                                                      const optLen = Math.floor(newUsefulLen / i) - 5;
+                                                      if (optLen >= 3000 && optLen <= 6000) {
+                                                        newPcs = i;
+                                                        newActualUL = newPcs * optLen;
+                                                        break;
+                                                      }
+                                                    }
+                                                    if (newPcs === 0) newActualUL = newUsefulLen;
+                                                  } else {
+                                                    newPcs = Math.floor(newUsefulLen / item.length);
+                                                    newActualUL = newPcs * item.length;
+                                                  }
                                                   const newKim = newDrawLen > 0 ? newActualUL / newDrawLen : 0;
                                                   const newTotalWeight = newKim > 0 ? item.remainingToProcess / newKim : item.remainingToProcess;
                                                   const billetArea = item.type === "Шестигранник" 
@@ -2309,14 +2367,14 @@ export function AdminPanel({
                                      res.type || "",
                                      res.grade || "",
                                      String(res.diameter).replace(".", ","),
-                                     res.lengthType === "НД" ? "НД (3000-6000)" : `МД ${res.length}`,
+                                     res.lengthType === "НД" ? "НД" : `МД ${res.length}`,
                                      String(res.weightTons).replace(".", ","),
                                      String(res.remainingToProcess.toFixed(3)).replace(".", ","),
                                      "Круг г/к ГОСТ 2590-2006",
                                      res.grade,
                                      String(res.billetDia).replace(".", ","),
                                      String(res.totalWeight.toFixed(3)).replace(".", ","),
-                                     res.lengthType === "НД" ? "НД (3000-6000)" : `МД ${res.billetLength}`,
+                                     res.lengthType === "НД" ? "НД" : `МД ${res.billetLength}`,
                                      String(res.drawLength > 0 ? ((res.techEnds / res.drawLength) * res.totalWeight).toFixed(3) : 0).replace(".", ","),
                                      String(res.lengthType === "НД" || res.drawLength <= 0 ? 0 : ((res.usefulLength - (res.pcsPerBillet * res.length)) / res.drawLength * res.totalWeight).toFixed(3)).replace(".", ","),
                                      String((res.remainingToProcess / res.totalWeight).toFixed(3)).replace(".", ","),
@@ -2374,14 +2432,14 @@ export function AdminPanel({
                                      res.type || "",
                                      res.grade || "",
                                      String(res.diameter).replace(".", ","),
-                                     res.lengthType === "НД" ? "НД (3000-6000)" : `МД ${res.length}`,
+                                     res.lengthType === "НД" ? "НД" : `МД ${res.length}`,
                                      String(res.weightTons).replace(".", ","),
                                      String(res.remainingToProcess.toFixed(3)).replace(".", ","),
                                      "Круг г/к ГОСТ 2590-2006",
                                      res.grade,
                                      String(res.billetDia).replace(".", ","),
                                      String(res.totalWeight.toFixed(3)).replace(".", ","),
-                                     res.lengthType === "НД" ? "НД (3000-6000)" : `МД ${res.billetLength}`,
+                                     res.lengthType === "НД" ? "НД" : `МД ${res.billetLength}`,
                                      String(res.drawLength > 0 ? ((res.techEnds / res.drawLength) * res.totalWeight).toFixed(3) : 0).replace(".", ","),
                                      String(res.lengthType === "НД" || res.drawLength <= 0 ? 0 : ((res.usefulLength - (res.pcsPerBillet * res.length)) / res.drawLength * res.totalWeight).toFixed(3)).replace(".", ","),
                                      String((res.remainingToProcess / res.totalWeight).toFixed(3)).replace(".", ","),
@@ -2501,7 +2559,7 @@ export function AdminPanel({
                                       <td className={`px-5 py-3 whitespace-nowrap text-center font-black text-slate-900 dark:text-white ${isSubRow ? 'opacity-40 grayscale' : ''}`}>{res.grade}</td>
                                       <td className={`px-5 py-3 whitespace-nowrap text-center font-bold text-slate-800 dark:text-slate-200 ${isSubRow ? 'opacity-40 grayscale' : ''}`}>{parseFloat(res.diameter.toFixed(2))}</td>
                                       <td className={`px-5 py-3 whitespace-nowrap text-center text-slate-800 dark:text-slate-200 font-medium ${isSubRow ? 'opacity-40 grayscale' : ''}`}>
-                                            {res.lengthType === "НД" ? "НД (3000-6000)" : `МД ${res.length}`}
+                                            {res.lengthType === "НД" ? "НД" : `МД ${res.length}`}
                                           </td>
                                           <td className={`px-5 py-3 whitespace-nowrap text-center font-black text-slate-900 dark:text-white ${isSubRow ? 'opacity-40 grayscale' : ''}`}>{res.weightTons.toFixed(3)}</td>
                                           <td className={`px-5 py-3 whitespace-nowrap text-center font-bold text-sky-600 dark:text-sky-400 ${isSubRow ? 'opacity-40 grayscale' : ''}`}>{res.remainingToProcess.toFixed(3)}</td>
@@ -2512,7 +2570,7 @@ export function AdminPanel({
                                           <td className={`px-5 py-3 whitespace-nowrap text-center font-black text-sky-600 dark:text-sky-400 ${isSubRow ? 'opacity-40 grayscale' : ''}`}>{parseFloat(res.billetDia.toFixed(2))}</td>
                                           <td className={`px-5 py-3 whitespace-nowrap text-center font-black text-emerald-600 dark:text-emerald-400 ${isSubRow ? 'opacity-40 grayscale' : ''}`}>{res.totalWeight.toFixed(3)}</td>
                                           <td className={`px-5 py-3 whitespace-nowrap text-slate-500 text-center ${isSubRow ? 'opacity-40 grayscale' : ''}`}>
-                                            {res.lengthType === "НД" ? "НД (3000-6000)" : `МД ${res.billetLength}`}
+                                            {res.lengthType === "НД" ? "НД" : `МД ${res.billetLength}`}
                                           </td>
                                           <td className={`px-5 py-3 whitespace-nowrap text-center ${isSubRow ? 'opacity-40 grayscale' : ''}`}>
                                             <span className={`font-bold text-red-500/80 block ${isSubRow ? 'opacity-40 grayscale' : ''} ${isSubRow ? 'opacity-40 grayscale' : ''}`}>{res.drawLength > 0 ? ((res.techEnds / res.drawLength) * res.totalWeight).toFixed(3) : 0} тн</span>
