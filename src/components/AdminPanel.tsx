@@ -267,22 +267,49 @@ export function AdminPanel({
       });
 
       matchingStockItems.sort((a, b) => {
-         const lenA = String(a["Длина"] || "").toUpperCase();
-         const lenB = String(b["Длина"] || "").toUpperCase();
-         const reqLengthType = String(res.lengthType || "").toUpperCase();
-         if (reqLengthType.startsWith("МД")) {
-            const reqLenNumber = String(res.billetLength);
-            const aIsExact = lenA.includes(reqLenNumber);
-            const bIsExact = lenB.includes(reqLenNumber);
-            if (aIsExact && !bIsExact) return -1;
-            if (!aIsExact && bIsExact) return 1;
-            
-            const aIsND = lenA.includes("Н/Д") || lenA.includes("НД");
-            const bIsND = lenB.includes("Н/Д") || lenB.includes("НД");
-            if (aIsND && !bIsND) return -1;
-            if (!aIsND && bIsND) return 1;
-         }
-         return 0;
+        const totalTechCoef = res.type === "Шестигранник" ? 1.03 * 1.003 : 1.027 * 1.003;
+        const getPotentialKim = (stock: any) => {
+          const sLenStr = String(stock["Длина"] || "").toUpperCase();
+          let sLen = 6000;
+          if (sLenStr.includes("Н/Д") || sLenStr.includes("НД")) sLen = 8500;
+          else {
+            const m = sLenStr.match(/\d+/);
+            if (m) sLen = parseInt(m[0]);
+          }
+          const dLen = sLen * res.drawRatio;
+          const uLen = dLen / totalTechCoef;
+          let bestAUL = 0;
+          if (res.lengthType === "НД") {
+            for (let i = 1; i <= 40; i++) {
+              const maxL = Math.floor(uLen / i) - 5;
+              const actualL = Math.min(6000, maxL);
+              if (actualL >= 2980) {
+                bestAUL = Math.max(bestAUL, i * actualL);
+              }
+            }
+          } else {
+            const pcs = Math.floor(uLen / res.length);
+            bestAUL = pcs * res.length;
+          }
+          return dLen > 0 ? bestAUL / dLen : 0;
+        };
+
+        const kimA = getPotentialKim(a);
+        const kimB = getPotentialKim(b);
+
+        if (Math.abs(kimA - kimB) > 0.0001) return kimB - kimA;
+        
+        const lenA = String(a["Длина"] || "").toUpperCase();
+        const lenB = String(b["Длина"] || "").toUpperCase();
+        const reqLengthType = String(res.lengthType || "").toUpperCase();
+        if (reqLengthType.startsWith("МД")) {
+          const reqLenNumber = String(res.billetLength);
+          const aIsExact = lenA.includes(reqLenNumber);
+          const bIsExact = lenB.includes(reqLenNumber);
+          if (aIsExact && !bIsExact) return -1;
+          if (!aIsExact && bIsExact) return 1;
+        }
+        return 0;
       });
 
       let allocatedStock = 0;
@@ -303,17 +330,89 @@ export function AdminPanel({
       totalAllocated += allocatedStock;
       totalDeficit += shortageStock;
 
+      // Recalculate metrics based on selected stock
+      const totalTechCoef = res.type === "Шестигранник" ? 1.03 * 1.003 : 1.027 * 1.003;
+      const calculateMetrics = (bLen) => {
+        const dLen = bLen * res.drawRatio;
+        const uLen = dLen / totalTechCoef;
+        let bestAUL = 0;
+
+        if (res.lengthType === "НД") {
+          for (let i = 1; i <= 40; i++) {
+            const maxL = Math.floor(uLen / i) - 5;
+            const actualL = Math.min(6000, maxL);
+            if (actualL >= 2980) {
+              const currentAUL = i * actualL;
+              if (currentAUL > bestAUL) {
+                bestAUL = currentAUL;
+              }
+            }
+          }
+        } else {
+          const pcs = Math.floor(uLen / res.length);
+          bestAUL = pcs * res.length;
+        }
+
+        const aUL = bestAUL > 0 ? bestAUL : uLen;
+        const kim = dLen > 0 ? aUL / dLen : 0;
+        const twRate = dLen > 0 ? (dLen - uLen) / dLen : 0;
+        const urRate = dLen > 0 ? (uLen - aUL) / dLen : 0;
+        return { kim, twRate, urRate };
+      };
+
+      let combinedTechWaste = 0;
+      let combinedUsefulRem = 0;
+      let combinedFinishedWeight = 0;
+
+      matchedStockItems.forEach(stock => {
+        const sLenStr = String(stock["Длина"] || "").toUpperCase();
+        let sLen = 6000;
+        if (sLenStr.includes("Н/Д") || sLenStr.includes("НД")) sLen = 8500;
+        else {
+          const m = sLenStr.match(/\d+/);
+          if (m) sLen = parseInt(m[0]);
+        }
+        const m = calculateMetrics(sLen);
+        combinedTechWaste += m.twRate * stock.allocatedAmount;
+        combinedUsefulRem += m.urRate * stock.allocatedAmount;
+        combinedFinishedWeight += m.kim * stock.allocatedAmount;
+      });
+
+      const deficitMetrics = calculateMetrics(res.billetLength);
+      combinedTechWaste += deficitMetrics.twRate * shortageStock;
+      combinedUsefulRem += deficitMetrics.urRate * shortageStock;
+      combinedFinishedWeight += deficitMetrics.kim * shortageStock;
+
+      const combinedKim = res.totalWeight > 0 ? combinedFinishedWeight / res.totalWeight : 0;
+
       return {
         ...res,
         allocatedStock,
         shortageStock,
-        matchedStockItems
+        matchedStockItems,
+        combinedTechWaste,
+        combinedUsefulRem,
+        combinedKim
       };
     });
 
     const totalRemaining = availableStock.reduce((sum, item) => sum + item.remainingStock, 0);
+    const sumTarget = calculationResults.reduce((sum, res) => sum + (res.remainingToProcess || 0), 0);
+    const sumTotalWeight = calculationResults.reduce((sum, res) => sum + (res.totalWeight || 0), 0);
+    const averageKim = matchedDemand.length > 0 
+      ? matchedDemand.reduce((sum, res) => sum + res.combinedKim, 0) / matchedDemand.length 
+      : 0;
 
-    return { matchedDemand, freeStock: availableStock.filter(item => item.remainingStock > 0.0005), totals: { allocated: totalAllocated, deficit: totalDeficit, remaining: totalRemaining } };
+    return { 
+      matchedDemand, 
+      freeStock: availableStock.filter(item => item.remainingStock > 0.0005), 
+      totals: { 
+        allocated: totalAllocated, 
+        deficit: totalDeficit, 
+        remaining: totalRemaining,
+        averageKim
+      } 
+    };
   }, [calculationResults, processedStock]);
 
   const { matchedDemand, freeStock, totals: stockTotals } = stockCalculationData;
@@ -565,7 +664,7 @@ export function AdminPanel({
         if (item.lengthType === "НД") {
           billetLength = 8500;
         } else {
-          billetLength = item.length > 0 ? item.length : 6000;
+          billetLength = 6000;
         }
 
         const drawLength = billetLength * drawRatio;
@@ -1213,7 +1312,7 @@ export function AdminPanel({
                 
                 {(supplySection === "calc-stock" || supplySection === "free-stock") && (
                   <div className="flex-1 flex justify-end">
-                    <div className="flex items-center bg-white dark:bg-[#1A1C19] border border-slate-200 dark:border-slate-800 rounded-2xl py-2 shadow-sm divide-x divide-slate-100 dark:divide-slate-800 ml-4 max-w-3xl min-w-[500px]">
+                    <div className="flex items-center bg-white dark:bg-[#1A1C19] border border-slate-200 dark:border-slate-800 rounded-2xl py-2 shadow-sm divide-x divide-slate-100 dark:divide-slate-800 ml-4 max-w-4xl min-w-[650px]">
                       <div className="flex flex-col flex-1 px-5 text-center">
                         <span className="text-[9px] text-emerald-500 uppercase font-black tracking-widest mb-1">Статус обеспечения</span>
                         <span className="text-sm font-black text-slate-900 dark:text-white">
@@ -1230,6 +1329,12 @@ export function AdminPanel({
                         <span className="text-[9px] text-sky-500 uppercase font-black tracking-widest mb-1">Остаток на складе заготовки</span>
                         <span className="text-sm font-black text-slate-900 dark:text-white">
                           {stockTotals.remaining.toFixed(3)} <span className="text-[10px] text-slate-400 font-bold ml-0.5">тн</span>
+                        </span>
+                      </div>
+                      <div className="flex flex-col flex-1 px-5 text-center">
+                        <span className="text-[9px] text-amber-500 uppercase font-black tracking-widest mb-1">Средний коэффициент КИМ 2</span>
+                        <span className="text-sm font-black text-slate-900 dark:text-white">
+                          {(stockTotals as any).averageKim.toFixed(3)}
                         </span>
                       </div>
                     </div>
@@ -2354,7 +2459,7 @@ export function AdminPanel({
                                  if (matchedDemand.length === 0) return;
                                  const headers = [
                                    "Внутренняя нумерация", "Дата отгрузки", "№ Заказа", "Клиент", "Номенклатура", "Профиль", "Марка", "Размер мм.", "Длина", "Кол-во тн в заказе", "Остаток к выполнению",
-                                   "Номенклатура заг.", "Марка заг.", "Размер мм. (Заг.)", "Кол-во тн заг.", "Длина мм.", "Тех. Отходы (тн)", "Деловой Остаток (тн)", "КИМ / Совет", "Статус обеспечения.", "К закупке тн (дефицит)", "Исходная Номенклатура", "Профиль", "НТД", "Марка стали", "Размер", "Длина", "Исх. Остаток ст. (тн)", "Взято из остатка (тн)", "Свободный остаток (тн)"
+                                   "Номенклатура заг.", "Марка заг.", "Размер мм. (Заг.)", "Кол-во тн заг.", "Длина мм.", "Тех. Отходы (тн)", "Деловой Остаток (тн)", "КИМ / Совет", "Статус обеспечения.", "К закупке тн (дефицит)", "Тех. отходы 2", "Дел. Остатки 2", "КИМ 2", "Исходная Номенклатура", "Профиль", "НТД", "Марка стали", "Размер", "Длина", "Исх. Остаток ст. (тн)", "Взято из остатка (тн)", "Свободный остаток (тн)"
                                  ];
                                  const rows: string[][] = [];
                                  matchedDemand.forEach((res: any) => {
@@ -2379,7 +2484,10 @@ export function AdminPanel({
                                      String(res.lengthType === "НД" || res.drawLength <= 0 ? 0 : ((res.usefulLength - (res.pcsPerBillet * res.length)) / res.drawLength * res.totalWeight).toFixed(3)).replace(".", ","),
                                      String((res.remainingToProcess / res.totalWeight).toFixed(3)).replace(".", ","),
                                      String(res.allocatedStock.toFixed(3)).replace(".", ","),
-                                     String(res.shortageStock.toFixed(3)).replace(".", ",")
+                                     String(res.shortageStock.toFixed(3)).replace(".", ","),
+                                     String(res.allocatedStock > 0 && res.combinedTechWaste > 0 ? res.combinedTechWaste.toFixed(3) : "0").replace(".", ","),
+                                     String(res.allocatedStock > 0 && res.combinedUsefulRem > 0 ? res.combinedUsefulRem.toFixed(3) : "0").replace(".", ","),
+                                     String(res.allocatedStock > 0 && res.combinedKim > 0 ? res.combinedKim.toFixed(3) : "0").replace(".", ",")
                                    ];
                                    if (res.matchedStockItems.length === 0) {
                                      rows.push([...baseRow, "", "", "", "", "", "", "", "", ""]);
@@ -2419,7 +2527,7 @@ export function AdminPanel({
                                  if (matchedDemand.length === 0) return;
                                  const headers = [
                                    "Внутренняя нумерация", "Дата отгрузки", "№ Заказа", "Клиент", "Номенклатура", "Профиль", "Марка", "Размер мм.", "Длина", "Кол-во тн в заказе", "Остаток к выполнению",
-                                   "Номенклатура заг.", "Марка заг.", "Размер мм. (Заг.)", "Кол-во тн заг.", "Длина мм.", "Тех. Отходы (тн)", "Деловой Остаток (тн)", "КИМ / Совет", "Статус обеспечения.", "К закупке тн (дефицит)", "Исходная Номенклатура", "Профиль", "НТД", "Марка стали", "Размер", "Длина", "Исх. Остаток ст. (тн)", "Взято из остатка (тн)", "Свободный остаток (тн)"
+                                   "Номенклатура заг.", "Марка заг.", "Размер мм. (Заг.)", "Кол-во тн заг.", "Длина мм.", "Тех. Отходы (тн)", "Деловой Остаток (тн)", "КИМ / Совет", "Статус обеспечения.", "К закупке тн (дефицит)", "Тех. отходы 2", "Дел. Остатки 2", "КИМ 2", "Исходная Номенклатура", "Профиль", "НТД", "Марка стали", "Размер", "Длина", "Исх. Остаток ст. (тн)", "Взято из остатка (тн)", "Свободный остаток (тн)"
                                  ];
                                  const rows: string[][] = [];
                                  matchedDemand.forEach((res: any) => {
@@ -2444,7 +2552,10 @@ export function AdminPanel({
                                      String(res.lengthType === "НД" || res.drawLength <= 0 ? 0 : ((res.usefulLength - (res.pcsPerBillet * res.length)) / res.drawLength * res.totalWeight).toFixed(3)).replace(".", ","),
                                      String((res.remainingToProcess / res.totalWeight).toFixed(3)).replace(".", ","),
                                      String(res.allocatedStock.toFixed(3)).replace(".", ","),
-                                     String(res.shortageStock.toFixed(3)).replace(".", ",")
+                                     String(res.shortageStock.toFixed(3)).replace(".", ","),
+                                     String(res.allocatedStock > 0 && res.combinedTechWaste > 0 ? res.combinedTechWaste.toFixed(3) : "0").replace(".", ","),
+                                     String(res.allocatedStock > 0 && res.combinedUsefulRem > 0 ? res.combinedUsefulRem.toFixed(3) : "0").replace(".", ","),
+                                     String(res.allocatedStock > 0 && res.combinedKim > 0 ? res.combinedKim.toFixed(3) : "0").replace(".", ",")
                                    ];
                                    if (res.matchedStockItems.length === 0) {
                                      rows.push([...baseRow, "", "", "", "", "", "", "", "", ""]);
@@ -2532,6 +2643,9 @@ export function AdminPanel({
                                   <th className={`px-5 py-4 text-center text-[10px] font-bold text-amber-500 uppercase tracking-widest whitespace-nowrap`}>КИМ / Совет</th>
                                   <th className={`px-5 py-4 text-center text-[10px] font-bold text-emerald-500 uppercase tracking-widest whitespace-nowrap`}>Статус обеспечения.</th>
                                   <th className={`px-5 py-4 text-center text-[10px] font-bold text-rose-500 uppercase tracking-widest whitespace-nowrap`}>К закупке тн (дефицит)</th>
+                                  <th className={`px-5 py-4 text-center text-[10px] font-bold text-amber-500 uppercase tracking-widest whitespace-nowrap`}>Тех. отходы 2</th>
+                                   <th className={`px-5 py-4 text-center text-[10px] font-bold text-amber-500 uppercase tracking-widest whitespace-nowrap`}>Дел. Остатки 2</th>
+                                   <th className={`px-5 py-4 text-center text-[10px] font-bold text-amber-500 uppercase tracking-widest whitespace-nowrap`}>КИМ 2</th>
                                   <th className={`px-5 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap`}>Исходная Номенклатура</th>
                                   <th className={`px-5 py-4 text-center text-[10px] font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap`}>Профиль</th>
                                   <th className={`px-5 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap`}>НТД</th>
@@ -2593,6 +2707,15 @@ export function AdminPanel({
                                           </td>
                                           <td className={`px-5 py-3 whitespace-nowrap text-center font-black ${res.shortageStock > 0.0005 ? 'text-rose-600 dark:text-rose-500' : 'text-slate-400'}`} rowSpan={Math.max(1, res.matchedStockItems.length)}>
                                             {res.shortageStock > 0.0005 ? res.shortageStock.toFixed(3) : "—"}
+                                          </td>
+                                          <td className={`px-5 py-3 whitespace-nowrap text-center font-bold text-amber-600`} rowSpan={Math.max(1, res.matchedStockItems.length)}>
+                                            {res.allocatedStock > 0 && res.combinedTechWaste > 0 ? res.combinedTechWaste.toFixed(3) : "—"}
+                                          </td>
+                                          <td className={`px-5 py-3 whitespace-nowrap text-center font-bold text-amber-600`} rowSpan={Math.max(1, res.matchedStockItems.length)}>
+                                            {res.allocatedStock > 0 && res.combinedUsefulRem > 0 ? res.combinedUsefulRem.toFixed(3) : "—"}
+                                          </td>
+                                          <td className={`px-5 py-3 whitespace-nowrap text-center font-bold text-amber-600`} rowSpan={Math.max(1, res.matchedStockItems.length)}>
+                                            {res.allocatedStock > 0 && res.combinedKim > 0 ? res.combinedKim.toFixed(3) : "—"}
                                           </td>
                                         </>
                                       )}
