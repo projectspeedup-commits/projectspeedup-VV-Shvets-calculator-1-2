@@ -1,6 +1,6 @@
 import { DEFAULT_STEEL_GRADES, formatInputValue, handleNumericInput, DEFAULT_ECONOMY_ITEMS, EconomyItem, ROUND_DATA, HEX_DATA, getGostForGrade } from "../lib/constants";
 import { Activity, LogOut, Plus, Trash2, Settings, Moon, Sun, Info, TrendingUp, Calculator, Wallet, Layers, Package, Upload, FileText, X, BookOpen, ChevronLeft, Download, Copy, Check } from "lucide-react";
-import { useEffect, useState, useRef, ChangeEvent, MouseEvent } from "react";
+import { useEffect, useState, useRef, ChangeEvent, MouseEvent, useMemo, Fragment } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import * as XLSX from "xlsx-js-style";
 import { BatchManualModal } from "./BatchManualModal";
@@ -218,6 +218,45 @@ export function AdminPanel({
       };
     }));
   }, [rawPrices]);
+
+  const matchedDemand = useMemo(() => {
+    if (calculationResults.length === 0) return [];
+
+    let availableStock = [...processedStock].map((item, idx) => ({ 
+      ...item, 
+      _id: idx, 
+      remainingStock: typeof item["Конечный остаток тн."] === 'number' ? item["Конечный остаток тн."] : parseFloat(item["Конечный остаток тн."]) || 0 
+    }));
+
+    return calculationResults.map(res => {
+      const matchingStockItems = availableStock.filter(stock => 
+        stock["Профиль"]?.toLowerCase() === res.type?.toLowerCase() &&
+        stock["Марка стали"]?.toLowerCase() === res.grade?.toLowerCase() &&
+        parseFloat(String(stock["Размер"]).replace(',', '.')) === res.billetDia
+      );
+
+      let allocatedStock = 0;
+      let matchedStockItems: any[] = [];
+
+      matchingStockItems.forEach(stock => {
+         if (stock.remainingStock > 0 && allocatedStock < res.totalWeight) {
+           const needed = res.totalWeight - allocatedStock;
+           const take = Math.min(needed, stock.remainingStock);
+           const stockBeforeTaking = stock.remainingStock;
+           stock.remainingStock -= take;
+           allocatedStock += take;
+           matchedStockItems.push({...stock, allocatedAmount: take, stockBeforeTaking, stockAfterTaking: stock.remainingStock});
+         }
+      });
+
+      return {
+        ...res,
+        allocatedStock,
+        shortageStock: Math.max(0, res.totalWeight - allocatedStock),
+        matchedStockItems
+      };
+    });
+  }, [calculationResults, processedStock]);
 
   // Helper for date formatting
   const formatDate = (input: any): string => {
@@ -2109,15 +2148,231 @@ export function AdminPanel({
                     transition={{ duration: 0.2 }}
                     className="flex flex-col gap-8"
                   >
-                    <div className="bg-white dark:bg-[#1A1C19] border border-slate-200 dark:border-slate-800 rounded-[32px] p-12 flex flex-col items-center justify-center min-h-[400px]">
-                      <div className="w-20 h-20 bg-sky-50 dark:bg-sky-900/20 rounded-[30px] flex items-center justify-center text-sky-500 mb-6">
-                        <Activity className="w-10 h-10" />
+                    {matchedDemand.length === 0 ? (
+                      <div className="bg-white dark:bg-[#1A1C19] border border-slate-200 dark:border-slate-800 rounded-[32px] p-12 flex flex-col items-center justify-center min-h-[400px]">
+                        <div className="w-20 h-20 bg-sky-50 dark:bg-sky-900/20 rounded-[30px] flex items-center justify-center text-sky-500 mb-6">
+                          <Activity className="w-10 h-10" />
+                        </div>
+                        <h3 className="text-xl font-bold text-slate-900 dark:text-white">Нет данных</h3>
+                        <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 text-center max-w-sm px-6 leading-relaxed">
+                          Сначала выполните расчет потребности и загрузите остатки.
+                        </p>
                       </div>
-                      <h3 className="text-xl font-bold text-slate-900 dark:text-white">Расчет с учетом наличия</h3>
-                      <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 text-center max-w-sm px-6 leading-relaxed">
-                        Алгоритм распределения остатков на потребность в разработке...
-                      </p>
-                    </div>
+                    ) : (
+                      <div className="bg-white dark:bg-[#1A1C19] border border-slate-200 dark:border-slate-800 rounded-[32px] overflow-hidden flex flex-col shadow-xl shadow-slate-200/50 dark:shadow-none">
+                        <div className="flex items-center justify-between mb-4">
+                           <div className="flex items-center gap-4">
+                             <h4 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-widest mr-4">Расчет с учетом наличия</h4>
+                           </div>
+                           <button
+                             onClick={() => {
+                               if (matchedDemand.length === 0) return;
+                               const headers = [
+                                 "Внутренняя нумерация", "Дата отгрузки", "№ Заказа", "Клиент", "Номенклатура", "Профиль", "Марка", "Размер мм.", "Длина", "Кол-во тн в заказе", "Остаток к выполнению",
+                                 "Номенклатура заг.", "Марка заг.", "Размер мм. (Заг.)", "Кол-во тн заг.", "Длина мм.", "Тех. Отходы (тн)", "Деловой Остаток (тн)", "КИМ / Совет", "Статус обеспечения.", "К закупке тн (дефицит)", "Исходная Номенклатура", "Профиль", "НТД", "Марка стали", "Размер", "Длина", "Исх. Остаток ст. (тн)", "Взято из остатка (тн)", "Свободный остаток (тн)"
+                               ];
+                               const rows: string[][] = [];
+                               matchedDemand.filter(res => res.totalWeight >= 0.0005).forEach(res => {
+                                 const baseRow = [
+                                   res.internalNo || "",
+                                   res.shippingDate || "",
+                                   res.orderNo || "",
+                                   res.client || "",
+                                   res.nomenclature || "",
+                                   res.type || "",
+                                   res.grade || "",
+                                   String(res.diameter).replace(".", ","),
+                                   res.lengthType === "НД" ? "НД 6000" : (res.lengthType && String(res.lengthType).startsWith("МД")) ? res.lengthType : `МД ${res.length}`,
+                                   String(res.weightTons).replace(".", ","),
+                                   String(res.remainingToProcess.toFixed(3)).replace(".", ","),
+                                   "Круг г/к ГОСТ 2590-2006",
+                                   res.grade,
+                                   String(res.billetDia).replace(".", ","),
+                                   String(res.totalWeight.toFixed(3)).replace(".", ","),
+                                   res.lengthType === "НД" ? "НД 6000" : (res.lengthType && String(res.lengthType).startsWith("МД")) ? res.lengthType : `МД ${res.billetLength}`,
+                                   String(res.drawLength > 0 ? ((res.techEnds / res.drawLength) * res.totalWeight).toFixed(3) : 0).replace(".", ","),
+                                   String(res.lengthType === "НД" || res.drawLength <= 0 ? 0 : ((res.usefulLength - (res.pcsPerBillet * res.length)) / res.drawLength * res.totalWeight).toFixed(3)).replace(".", ","),
+                                   String((res.remainingToProcess / res.totalWeight).toFixed(3)).replace(".", ","),
+                                   String(res.allocatedStock.toFixed(3)).replace(".", ","),
+                                   String(res.shortageStock.toFixed(3)).replace(".", ",")
+                                 ];
+                                 if (res.matchedStockItems.length === 0) {
+                                   rows.push([...baseRow, "", "", "", "", "", "", "", "", ""]);
+                                 } else {
+                                   res.matchedStockItems.forEach((stock: any) => {
+                                     rows.push([
+                                       ...baseRow,
+                                       stock["Исходная Номенклатура"] || "",
+                                       stock["Профиль"] || "",
+                                       stock["НТД"] || "",
+                                       stock["Марка стали"] || "",
+                                       String(stock["Размер"] || "").replace(".", ","),
+                                       stock["Длина"] || "",
+                                       String(stock.stockBeforeTaking || 0).replace(".", ","),
+                                       String(stock.allocatedAmount || 0).replace(".", ","),
+                                       String(stock.stockAfterTaking || 0).replace(".", ",")
+                                     ]);
+                                   });
+                                 }
+                               });
+                               
+                               const tsv = [headers, ...rows].map(row => row.join("\t")).join("\n");
+                               navigator.clipboard.writeText(tsv);
+                               setIsCopied(true);
+                               setTimeout(() => setIsCopied(false), 2000);
+                             }}
+                             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm ${
+                               isCopied 
+                                 ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" 
+                                 : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-50"
+                             }`}
+                           >
+                             {isCopied ? <><Check className="w-4 h-4"/> Скопировано!</> : <><Copy className="w-4 h-4"/> Копировать для Sheets</>}
+                           </button>
+                         </div>
+                         <div
+                           ref={tableContainerRef}
+                           onMouseDown={handleMouseDown}
+                           onMouseLeave={handleMouseLeaveOrUp}
+                           onMouseUp={handleMouseLeaveOrUp}
+                           onMouseMove={handleMouseMove}
+                           className={`overflow-x-auto min-h-[400px] max-h-[calc(100vh-300px)] custom-scrollbar relative ${isDragging ? 'select-none cursor-grabbing' : 'cursor-grab'}`}
+                         >
+                           <table className="w-full border-collapse pointer-events-auto">
+                             <thead className="sticky top-0 z-20">
+                                <tr className="bg-slate-50/95 dark:bg-[#1A1C19]/95 backdrop-blur-sm shadow-[0_1px_0_rgba(241,245,249,1)] dark:shadow-[0_1px_0_rgba(30,41,59,1)]">
+                                  <th className="px-5 py-4 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest w-20">Внутренняя нумерация</th>
+                                  <th className="px-5 py-4 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest w-16">Дата отгрузки</th>
+                                  <th className="px-5 py-4 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">№ Заказа</th>
+                                  <th className="px-5 py-4 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Клиент</th>
+                                  <th className="px-5 py-4 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Номенклатура</th>
+                                  <th className="px-5 py-4 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Профиль</th>
+                                  <th className="px-5 py-4 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Марка</th>
+                                  <th className="px-5 py-4 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Размер мм.</th>
+                                  <th className="px-5 py-4 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Длина</th>
+                                  <th className="px-5 py-4 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Кол-во тн в заказе</th>
+                                  <th className="px-5 py-4 text-center text-[10px] font-bold text-sky-600 uppercase tracking-widest whitespace-nowrap">Остаток к выполнению</th>
+                                  <th className="px-5 py-4 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Номенклатура</th>
+                                  <th className="px-5 py-4 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Марка заг.</th>
+                                  <th className="px-5 py-4 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Размер мм.</th>
+                                  <th className="px-5 py-4 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap text-emerald-600">Кол-во тн заг.</th>
+                                  <th className="px-5 py-4 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Длина мм.</th>
+                                  <th className="px-5 py-4 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap text-amber-500/80">Тех. Отходы</th>
+                                  <th className="px-5 py-4 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap text-amber-500/80">Делов. Остаток</th>
+                                  <th className="px-5 py-4 text-center text-[10px] font-bold text-amber-500 uppercase tracking-widest whitespace-nowrap">КИМ / Совет</th>
+                                  <th className="px-5 py-4 text-center text-[10px] font-bold text-emerald-500 uppercase tracking-widest whitespace-nowrap">Статус обеспечения.</th>
+                                  <th className="px-5 py-4 text-center text-[10px] font-bold text-rose-500 uppercase tracking-widest whitespace-nowrap">К закупке тн (дефицит)</th>
+                                  <th className="px-5 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap">Исходная Номенклатура</th>
+                                  <th className="px-5 py-4 text-center text-[10px] font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap">Профиль</th>
+                                  <th className="px-5 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap">НТД</th>
+                                  <th className="px-5 py-4 text-center text-[10px] font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap">Марка стали</th>
+                                  <th className="px-5 py-4 text-center text-[10px] font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap">Размер</th>
+                                  <th className="px-5 py-4 text-center text-[10px] font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap">Длина</th>
+                                  <th className="px-5 py-4 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Исх. Остаток (тн)</th>
+                                  <th className="px-5 py-4 text-center text-[10px] font-bold text-emerald-500 uppercase tracking-widest whitespace-nowrap">Взято (тн)</th>
+                                  <th className="px-5 py-4 text-center text-[10px] font-bold text-sky-500 uppercase tracking-widest whitespace-nowrap">Остаток на складе (тн)</th>
+                                </tr>
+                             </thead>
+                             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-[11px]">
+                               {matchedDemand.map((res) => {
+                                 const renderMainRow = (stockItem: any = null, isSubRow = false) => (
+                                   <tr key={`${res.id}${stockItem ? `-${stockItem._id}` : ''}`} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors">
+                                      {isSubRow ? (
+                                        <>
+                                          <td colSpan={21} className="px-5 py-3 bg-slate-50/30 dark:bg-slate-800/10 border-r border-slate-100 dark:border-slate-800 pointer-events-none"></td>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <td className="px-5 py-3 whitespace-nowrap text-center text-slate-600 dark:text-slate-400">{res.internalNo || "—"}</td>
+                                          <td className="px-5 py-3 whitespace-nowrap text-center text-slate-600 dark:text-slate-400">{res.shippingDate}</td>
+                                          <td className="px-5 py-3 whitespace-nowrap text-center font-bold text-slate-600 dark:text-slate-400">{res.orderNo}</td>
+                                          <td className="px-5 py-3 text-center font-medium text-slate-800 dark:text-slate-200 whitespace-nowrap">{res.client}</td>
+                                          <td className="px-5 py-3 text-center max-w-[200px]">
+                                            <span className="text-[10px] text-slate-400 line-clamp-1" title={res.nomenclature}>
+                                              {res.nomenclature}
+                                            </span>
+                                          </td>
+                                          <td className="px-5 py-3 whitespace-nowrap text-center text-slate-600 dark:text-slate-400">{res.type}</td>
+                                          <td className="px-5 py-3 whitespace-nowrap text-center font-black text-slate-900 dark:text-white">{res.grade}</td>
+                                          <td className="px-5 py-3 whitespace-nowrap text-center font-bold text-slate-800 dark:text-slate-200">{parseFloat(res.diameter.toFixed(2))}</td>
+                                          <td className="px-5 py-3 whitespace-nowrap text-center text-slate-800 dark:text-slate-200 font-medium">
+                                            {res.lengthType === "НД" ? "НД 6000" : res.lengthType.startsWith("МД") ? res.lengthType : `МД ${res.length}`}
+                                          </td>
+                                          <td className="px-5 py-3 whitespace-nowrap text-center font-black text-slate-900 dark:text-white">{res.weightTons.toFixed(3)}</td>
+                                          <td className="px-5 py-3 whitespace-nowrap text-center font-bold text-sky-600 dark:text-sky-400">{res.remainingToProcess.toFixed(3)}</td>
+                                          <td className="px-5 py-3 whitespace-nowrap text-center text-slate-500">
+                                            Круг г/к ГОСТ 2590-2006
+                                          </td>
+                                          <td className="px-5 py-3 whitespace-nowrap text-center font-black text-slate-900 dark:text-white">{res.grade}</td>
+                                          <td className="px-5 py-3 whitespace-nowrap text-center font-black text-sky-600 dark:text-sky-400">{parseFloat(res.billetDia.toFixed(2))}</td>
+                                          <td className="px-5 py-3 whitespace-nowrap text-center font-black text-emerald-600 dark:text-emerald-400">{res.totalWeight.toFixed(3)}</td>
+                                          <td className="px-5 py-3 whitespace-nowrap text-slate-500 text-center">
+                                            {res.lengthType === "НД" ? "НД 6000" : `МД ${res.billetLength}`}
+                                          </td>
+                                          <td className="px-5 py-3 whitespace-nowrap text-center">
+                                            <span className="font-bold text-red-500/80 block">{res.drawLength > 0 ? ((res.techEnds / res.drawLength) * res.totalWeight).toFixed(3) : 0} тн</span>
+                                            <span className="text-[9px] text-slate-400 block">{res.drawLength > 0 ? (((res.techEnds / res.drawLength) * res.totalWeight / res.totalWeight) * 100).toFixed(1) : 0}%</span>
+                                          </td>
+                                          <td className="px-5 py-3 whitespace-nowrap text-center">
+                                            <span className="font-bold text-sky-500/80 block">{(res.lengthType === "НД" || res.drawLength <= 0 ? 0 : ((res.usefulLength - (res.pcsPerBillet * res.length)) / res.drawLength * res.totalWeight)).toFixed(3)} тн</span>
+                                            <span className="text-[9px] text-slate-400 block">{(res.lengthType === "НД" || res.drawLength <= 0 ? 0 : (((res.usefulLength - (res.pcsPerBillet * res.length)) / res.drawLength * res.totalWeight / res.totalWeight) * 100)).toFixed(1)}%</span>
+                                          </td>
+                                          <td className="px-5 py-3 whitespace-nowrap text-center">
+                                            <span className={`font-black tracking-tight ${res.remainingToProcess / res.totalWeight < 0.92 ? 'text-red-500' : 'text-amber-600'}`}>
+                                              {(res.remainingToProcess / res.totalWeight).toFixed(3)}
+                                            </span>
+                                          </td>
+                                        </>
+                                      )}
+                                      
+                                      {!isSubRow && (
+                                        <>
+                                          <td className={`px-5 py-3 whitespace-nowrap text-center font-black ${res.allocatedStock > 0 ? 'text-emerald-600 dark:text-emerald-500' : 'text-slate-400'}`} rowSpan={Math.max(1, res.matchedStockItems.length)}>
+                                            {res.allocatedStock > 0 ? res.allocatedStock.toFixed(3) : "—"}
+                                          </td>
+                                          <td className={`px-5 py-3 whitespace-nowrap text-center font-black ${res.shortageStock > 0.0005 ? 'text-rose-600 dark:text-rose-500' : 'text-slate-400'}`} rowSpan={Math.max(1, res.matchedStockItems.length)}>
+                                            {res.shortageStock > 0.0005 ? res.shortageStock.toFixed(3) : "—"}
+                                          </td>
+                                        </>
+                                      )}
+
+                                      {stockItem ? (
+                                        <>
+                                          <td className="px-5 py-3 text-slate-600 dark:text-slate-400 max-w-[200px] truncate text-left" title={stockItem["Исходная Номенклатура"]}>
+                                            {stockItem["Исходная Номенклатура"]}
+                                          </td>
+                                          <td className="px-5 py-3 text-center font-medium text-slate-600 dark:text-slate-400">{stockItem["Профиль"]}</td>
+                                          <td className="px-5 py-3 text-left text-[10px] text-slate-500 max-w-[150px] truncate">{stockItem["НТД"]}</td>
+                                          <td className="px-5 py-3 text-center font-bold text-slate-700 dark:text-slate-300">{stockItem["Марка стали"]}</td>
+                                          <td className="px-5 py-3 text-center text-slate-600 dark:text-slate-400">{stockItem["Размер"]}</td>
+                                          <td className="px-5 py-3 text-center text-slate-500">{stockItem["Длина"]}</td>
+                                          <td className="px-5 py-3 text-center font-bold text-slate-400">{stockItem.stockBeforeTaking.toFixed(3)}</td>
+                                          <td className="px-5 py-3 text-center font-black text-emerald-600">{stockItem.allocatedAmount.toFixed(3)}</td>
+                                          <td className="px-5 py-3 text-center font-bold text-sky-600">{stockItem.stockAfterTaking.toFixed(3)}</td>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <td className="px-5 py-3 text-slate-400 italic text-left" colSpan={9}>—</td>
+                                        </>
+                                      )}
+                                   </tr>
+                                 );
+
+                                 if (res.matchedStockItems.length === 0) {
+                                   return renderMainRow();
+                                 }
+
+                                 return (
+                                   <Fragment key={res.id}>
+                                     {res.matchedStockItems.map((stock: any, index: number) => renderMainRow(stock, index > 0))}
+                                   </Fragment>
+                                 );
+                               })}
+                             </tbody>
+                           </table>
+                         </div>
+                      </div>
+                    )}
                   </motion.div>
                 ) : null}
               </AnimatePresence>
