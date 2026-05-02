@@ -267,49 +267,22 @@ export function AdminPanel({
       });
 
       matchingStockItems.sort((a, b) => {
-        const totalTechCoef = res.type === "Шестигранник" ? 1.03 * 1.003 : 1.027 * 1.003;
-        const getPotentialKim = (stock: any) => {
-          const sLenStr = String(stock["Длина"] || "").toUpperCase();
-          let sLen = 6000;
-          if (sLenStr.includes("Н/Д") || sLenStr.includes("НД")) sLen = 8500;
-          else {
-            const m = sLenStr.match(/\d+/);
-            if (m) sLen = parseInt(m[0]);
-          }
-          const dLen = sLen * res.drawRatio;
-          const uLen = dLen / totalTechCoef;
-          let bestAUL = 0;
-          if (res.lengthType === "НД") {
-            for (let i = 1; i <= 40; i++) {
-              const maxL = Math.floor(uLen / i) - 5;
-              const actualL = Math.min(6000, maxL);
-              if (actualL >= 2980) {
-                bestAUL = Math.max(bestAUL, i * actualL);
-              }
-            }
-          } else {
-            const pcs = Math.floor(uLen / res.length);
-            bestAUL = pcs * res.length;
-          }
-          return dLen > 0 ? bestAUL / dLen : 0;
-        };
-
-        const kimA = getPotentialKim(a);
-        const kimB = getPotentialKim(b);
-
-        if (Math.abs(kimA - kimB) > 0.0001) return kimB - kimA;
-        
-        const lenA = String(a["Длина"] || "").toUpperCase();
-        const lenB = String(b["Длина"] || "").toUpperCase();
-        const reqLengthType = String(res.lengthType || "").toUpperCase();
-        if (reqLengthType.startsWith("МД")) {
-          const reqLenNumber = String(res.billetLength);
-          const aIsExact = lenA.includes(reqLenNumber);
-          const bIsExact = lenB.includes(reqLenNumber);
-          if (aIsExact && !bIsExact) return -1;
-          if (!aIsExact && bIsExact) return 1;
-        }
-        return 0;
+         const lenA = String(a["Длина"] || "").toUpperCase();
+         const lenB = String(b["Длина"] || "").toUpperCase();
+         const reqLengthType = String(res.lengthType || "").toUpperCase();
+         if (reqLengthType.startsWith("МД")) {
+            const reqLenNumber = String(res.billetLength);
+            const aIsExact = lenA.includes(reqLenNumber);
+            const bIsExact = lenB.includes(reqLenNumber);
+            if (aIsExact && !bIsExact) return -1;
+            if (!aIsExact && bIsExact) return 1;
+            
+            const aIsND = lenA.includes("Н/Д") || lenA.includes("НД");
+            const bIsND = lenB.includes("Н/Д") || lenB.includes("НД");
+            if (aIsND && !bIsND) return -1;
+            if (!aIsND && bIsND) return 1;
+         }
+         return 0;
       });
 
       let allocatedStock = 0;
@@ -335,25 +308,22 @@ export function AdminPanel({
       const calculateMetrics = (bLen) => {
         const dLen = bLen * res.drawRatio;
         const uLen = dLen / totalTechCoef;
-        let bestAUL = 0;
-
+        let pcs = 0;
+        let aUL = 0;
         if (res.lengthType === "НД") {
-          for (let i = 1; i <= 40; i++) {
-            const maxL = Math.floor(uLen / i) - 5;
-            const actualL = Math.min(6000, maxL);
-            if (actualL >= 2980) {
-              const currentAUL = i * actualL;
-              if (currentAUL > bestAUL) {
-                bestAUL = currentAUL;
-              }
+          for (let i = 1; i <= 20; i++) {
+            const optLen = Math.floor(uLen / i) - 5;
+            if (optLen >= 3000 && optLen <= 6000) {
+              pcs = i;
+              aUL = pcs * optLen;
+              break;
             }
           }
+          if (pcs === 0) aUL = uLen;
         } else {
-          const pcs = Math.floor(uLen / res.length);
-          bestAUL = pcs * res.length;
+          pcs = Math.floor(uLen / res.length);
+          aUL = pcs * res.length;
         }
-
-        const aUL = bestAUL > 0 ? bestAUL : uLen;
         const kim = dLen > 0 ? aUL / dLen : 0;
         const twRate = dLen > 0 ? (dLen - uLen) / dLen : 0;
         const urRate = dLen > 0 ? (uLen - aUL) / dLen : 0;
