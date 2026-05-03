@@ -129,6 +129,33 @@ export function BatchManualModal({ isOpen, onClose }: BatchManualModalProps) {
                   </li>
                 </ul>
               </div>
+
+              <div className="bg-slate-900 dark:bg-slate-800 rounded-[24px] p-6 text-white shadow-xl mt-6">
+                <h4 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider mb-4 text-slate-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  Правила оптимизации КИМ (Коэффициент Использования Металла)
+                </h4>
+                <ul className="space-y-4">
+                  <li className="flex items-start gap-3">
+                    <div className="mt-1.5 w-1.5 h-1.5 rounded-full bg-white/20 shrink-0" />
+                    <p className="text-xs sm:text-sm font-medium leading-relaxed opacity-90 text-slate-200">
+                      <strong className="text-white">Правило 1 (МД заготовка):</strong> Если заготовка имеет мерную длину (МД), отличную от 6000 мм, наивысший приоритет отдается заказам с назначением МД по наибольшему значению КИМ. Система распределяет такую заготовку по заказам, сортируя их по убыванию пользы от применения.
+                    </p>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <div className="mt-1.5 w-1.5 h-1.5 rounded-full bg-white/20 shrink-0" />
+                    <p className="text-xs sm:text-sm font-medium leading-relaxed opacity-90 text-slate-200">
+                      <strong className="text-white">Правило 2 (НД и МД 6000 заготовка):</strong> Для заготовок с длиной МД 6000, НД или Н/Д высший приоритет отдается заказам с назначением НД (3000-6000, НД, Н/Д). Система сначала закрывает потребность в НД заказах, а остаток распределяет на заказы с МД.
+                    </p>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <div className="mt-1.5 w-1.5 h-1.5 rounded-full bg-white/20 shrink-0" />
+                    <p className="text-xs sm:text-sm font-medium leading-relaxed opacity-90 text-slate-200">
+                      <strong className="text-white">Авто-улучшение:</strong> При расчете потребности с учетом наличия на складе, эти правила применяются автоматически даже до нажатия кнопки "Применить все улучшения КИМ".
+                    </p>
+                  </li>
+                </ul>
+              </div>
             </div>
 
             {/* Footer */}

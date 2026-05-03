@@ -135,6 +135,36 @@ export function UserManualModal({ isOpen, onClose }: UserManualModalProps) {
                   </li>
                 </ul>
               </div>
+
+              <div className="bg-slate-900 dark:bg-slate-800 rounded-[24px] p-6 text-white shadow-xl mt-6">
+                <h4 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider mb-4 text-slate-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  Автоматическая оптимизация (КИМ)
+                </h4>
+                <p className="text-sm text-slate-400 mb-4 font-medium">
+                  При расчете наличия на складе действуют правила улучшения коэффициента использования металла:
+                </p>
+                <ul className="space-y-4">
+                  <li className="flex items-start gap-3">
+                    <div className="mt-1.5 w-1.5 h-1.5 rounded-full bg-white/20 shrink-0" />
+                    <p className="text-xs sm:text-sm font-medium leading-relaxed opacity-90 text-slate-200">
+                      <strong className="text-white">Правило 1:</strong> Если заготовка МД (не 6000), приоритет заказам МД по максимальному КИМ.
+                    </p>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <div className="mt-1.5 w-1.5 h-1.5 rounded-full bg-white/20 shrink-0" />
+                    <p className="text-xs sm:text-sm font-medium leading-relaxed opacity-90 text-slate-200">
+                      <strong className="text-white">Правило 2:</strong> Заготовки МД 6000, НД в первую очередь отдаются заказам с НД.
+                    </p>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <div className="mt-1.5 w-1.5 h-1.5 rounded-full bg-white/20 shrink-0" />
+                    <p className="text-xs sm:text-sm font-medium leading-relaxed opacity-90 text-slate-200">
+                      <strong className="text-white">Авто-применение:</strong> Оптимизация применяется автоматически в разделе "Потребность с учетом наличия" даже до нажатия кнопки "Применить улучшения КИМ".
+                    </p>
+                  </li>
+                </ul>
+              </div>
             </div>
 
             {/* Footer */}

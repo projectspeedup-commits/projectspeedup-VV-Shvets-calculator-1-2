@@ -669,7 +669,7 @@ export function CalculatorApp({
     setSelectedTarget(calc.selectedTarget);
     setSelectedRaw(calc.selectedRaw);
     setOrderWeight(calc.orderWeight);
-    setOrderedLength(calc.orderedLength || "НД");
+    setOrderedLength(calc.orderedLength || "6000");
     setSellPrice(calc.sellPrice || "");
     
     if (calc.lengthInputValue && calc.lengthInputSource) {
@@ -1074,7 +1074,7 @@ export function CalculatorApp({
                             </div>
                             <div className="flex flex-col">
                               <span className="text-[9px] uppercase font-semibold text-slate-400 dark:text-slate-500 leading-none mb-0.5">Заказ:</span>
-                              <span className="font-bold text-slate-700 dark:text-slate-200">{calc.orderedLength || "НД"} мм</span>
+                              <span className="font-bold text-slate-700 dark:text-slate-200">{calc.orderedLength || "6000"} мм</span>
                             </div>
                             <div className="flex flex-col text-right">
                               <span className="text-[9px] uppercase font-semibold text-[#0D652D] dark:text-green-500 leading-none mb-0.5">Полезная:</span>
