@@ -180,28 +180,50 @@ export function AdminPanel({
 
   // Grab-to-scroll state for the table
   const tableContainerRef = useRef<HTMLDivElement>(null);
+  const summaryContainerRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [isSummaryDragging, setIsSummaryDragging] = useState(false);
   const [startX, setStartX] = useState(0);
+  const [summaryStartX, setSummaryStartX] = useState(0);
   const [scrollLeftState, setScrollLeftState] = useState(0);
+  const [summaryScrollLeft, setSummaryScrollLeft] = useState(0);
 
   const handleMouseDown = (e: MouseEvent) => {
     if (!tableContainerRef.current) return;
     setIsDragging(true);
-    // Use pageX relative to container offset
     setStartX(e.pageX - tableContainerRef.current.offsetLeft);
     setScrollLeftState(tableContainerRef.current.scrollLeft);
+  };
+
+  const onSummaryMouseDown = (e: MouseEvent) => {
+    if (!summaryContainerRef.current) return;
+    setIsSummaryDragging(true);
+    setSummaryStartX(e.pageX - summaryContainerRef.current.offsetLeft);
+    setSummaryScrollLeft(summaryContainerRef.current.scrollLeft);
   };
 
   const handleMouseLeaveOrUp = () => {
     setIsDragging(false);
   };
 
+  const onSummaryMouseLeaveOrUp = () => {
+    setIsSummaryDragging(false);
+  };
+
   const handleMouseMove = (e: MouseEvent) => {
     if (!isDragging || !tableContainerRef.current) return;
     e.preventDefault();
     const x = e.pageX - tableContainerRef.current.offsetLeft;
-    const walk = (x - startX) * 1.5; // adjust scrolling speed
+    const walk = (x - startX) * 1.5;
     tableContainerRef.current.scrollLeft = scrollLeftState - walk;
+  };
+
+  const onSummaryMouseMove = (e: MouseEvent) => {
+    if (!isSummaryDragging || !summaryContainerRef.current) return;
+    e.preventDefault();
+    const x = e.pageX - summaryContainerRef.current.offsetLeft;
+    const walk = (x - summaryStartX) * 1.5;
+    summaryContainerRef.current.scrollLeft = summaryScrollLeft - walk;
   };
 
   // Synchronize prices in calculation results when rawPrices changes
@@ -278,7 +300,7 @@ export function AdminPanel({
     const getStockBilletLength = (stock: any) => {
       const sLenStr = String(stock["Длина"] || "").toUpperCase();
       let sLen = 6000;
-      if (sLenStr.includes("Н/Д") || sLenStr.includes("НД")) sLen = 8500;
+      if (sLenStr.includes("Н/Д") || sLenStr.includes("НД")) sLen = 6000;
       else {
         const m = sLenStr.match(/\d+/);
         if (m) sLen = parseInt(m[0]);
@@ -335,7 +357,7 @@ export function AdminPanel({
         if (stockLength.includes("МД")) {
           const numMatch = stockLength.match(/\d+/);
           if (numMatch) {
-            return parseInt(numMatch[0]) <= 8500;
+            return parseInt(numMatch[0]) <= 6000;
           }
           return true;
         }
@@ -649,7 +671,7 @@ export function AdminPanel({
             
             if (isNomND) {
               lengthType = "НД";
-              length = 8500;
+              length = 6000;
             } else if (colMap.lengthIdx !== -1 && row[colMap.lengthIdx]) {
               const rawLength = String(row[colMap.lengthIdx]).trim().toUpperCase();
               if (rawLength.includes("НД") || rawLength.includes("Н/Д") || rawLength.includes("Н.Д.")) {
@@ -718,7 +740,7 @@ export function AdminPanel({
         const totalTechCoef = item.type === "Шестигранник" ? 1.03 * 1.003 : 1.027 * 1.003;
 
         if (item.lengthType === "НД") {
-          billetLength = 8500;
+          billetLength = 6000;
         } else {
           billetLength = 6000;
         }
@@ -769,7 +791,7 @@ export function AdminPanel({
           }
         } else if (item.lengthType === "НД") {
           const MIN_B = 4000;
-          const MAX_B = 8500;
+          const MAX_B = 6000;
           const STEP = 100;
           
           for (let l = MIN_B; l <= MAX_B; l += STEP) {
@@ -825,7 +847,7 @@ export function AdminPanel({
           wastePercent: (1 - kim) * 100,
           totalWeight,
           billetCount,
-          pcsPerBillet: piecesCount || 1,
+          pcsPerBillet: piecesCount || 0,
           targetLength: item.length,
           quantity: billetCount,
           price,
@@ -1368,72 +1390,81 @@ export function AdminPanel({
                 
                 {(supplySection === "calc-stock" || supplySection === "free-stock") && (
                   <div className="flex-1 min-w-0 w-full relative overflow-hidden">
-                    <div className="flex items-stretch xl:items-center gap-2 sm:gap-3 xl:ml-2 w-full p-1.5 sm:p-2 bg-slate-50/80 dark:bg-[#1A1C19]/40 backdrop-blur-xl border border-slate-200/60 dark:border-slate-800/60 rounded-[18px] sm:rounded-2xl overflow-x-auto hide-scrollbar scroll-smooth snap-x snap-mandatory">
+                    <div 
+                      ref={summaryContainerRef}
+                      onMouseDown={onSummaryMouseDown}
+                      onMouseUp={onSummaryMouseLeaveOrUp}
+                      onMouseLeave={onSummaryMouseLeaveOrUp}
+                      onMouseMove={onSummaryMouseMove}
+                      className={`flex items-stretch xl:items-center gap-2 sm:gap-3 xl:gap-2 xl:ml-2 w-full p-1.5 sm:p-2 bg-slate-50/80 dark:bg-[#1A1C19]/40 backdrop-blur-xl border border-slate-200/60 dark:border-slate-800/60 rounded-[18px] sm:rounded-2xl overflow-x-auto xl:overflow-x-visible xl:justify-around hide-scrollbar snap-x snap-mandatory xl:snap-none transition-all ${
+                        isSummaryDragging ? 'cursor-grabbing select-none scroll-auto' : 'cursor-grab xl:cursor-default scroll-smooth'
+                      }`}
+                    >
                       
                       {/* Item 1: Взято со склада (emerald) */}
-                      <div className="shrink-0 snap-start flex flex-col min-w-[130px] sm:min-w-[140px] justify-center px-4 py-2.5 sm:py-3 bg-gradient-to-br from-emerald-50 to-emerald-100/30 dark:from-emerald-950/40 dark:to-emerald-900/10 border border-emerald-200/50 dark:border-emerald-800/50 rounded-xl sm:rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] relative overflow-hidden group">
+                      <div className="shrink-0 xl:shrink snap-start flex flex-col min-w-[130px] sm:min-w-[140px] xl:min-w-0 xl:flex-1 justify-center px-4 py-2.5 sm:py-3 xl:px-1 bg-gradient-to-br from-emerald-50 to-emerald-100/30 dark:from-emerald-950/40 dark:to-emerald-900/10 border border-emerald-200/50 dark:border-emerald-800/50 rounded-xl sm:rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] relative overflow-hidden group">
                         <div className="absolute -right-4 -top-4 w-16 h-16 bg-emerald-500/10 blur-xl rounded-full group-hover:scale-150 transition-transform duration-700" />
-                        <span className="text-[10px] sm:text-[11px] text-emerald-600 dark:text-emerald-400 font-black uppercase tracking-widest mb-1 relative z-10 flex items-center leading-tight">
-                          <Package className="w-3.5 h-3.5 mr-1.5 opacity-80 shrink-0" />
+                        <span className="text-[10px] sm:text-[11px] xl:text-[7.5px] 2xl:text-[10px] text-emerald-600 dark:text-emerald-400 font-black uppercase tracking-widest mb-1 relative z-10 flex items-center leading-tight">
+                          <Package className="w-3 h-3 xl:w-2 xl:h-2 2xl:w-3.5 2xl:h-3.5 mr-1 xl:mr-0.5 opacity-80 shrink-0" />
                           <span className="truncate">Взято из заг.</span>
                         </span>
-                        <span className="text-xl sm:text-2xl font-black text-emerald-950 dark:text-emerald-50 leading-none relative z-10 tracking-tight">
-                          {stockTotals.allocated.toFixed(3)}<span className="text-[9px] sm:text-[10px] text-emerald-600/60 dark:text-emerald-400/50 font-bold ml-1 uppercase">тн</span>
+                        <span className="text-xl sm:text-2xl xl:text-[13px] 2xl:text-xl font-black text-emerald-950 dark:text-emerald-50 leading-none relative z-10 tracking-tighter">
+                          {stockTotals.allocated.toFixed(3)}<span className="text-[9px] sm:text-[10px] xl:text-[7px] 2xl:text-[9px] text-emerald-600/60 dark:text-emerald-400/50 font-bold ml-1 uppercase">тн</span>
                         </span>
                       </div>
 
                       {/* Item 2: Дефицит */}
-                      <div className="shrink-0 snap-start flex flex-col min-w-[130px] sm:min-w-[140px] justify-center px-4 py-2.5 sm:py-3 bg-gradient-to-br from-rose-50 to-rose-100/30 dark:from-rose-950/40 dark:to-rose-900/10 border border-rose-200/50 dark:border-rose-800/50 rounded-xl sm:rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] relative overflow-hidden group">
+                      <div className="shrink-0 xl:shrink snap-start flex flex-col min-w-[130px] sm:min-w-[140px] xl:min-w-0 xl:flex-1 justify-center px-4 py-2.5 sm:py-3 xl:px-1 bg-gradient-to-br from-rose-50 to-rose-100/30 dark:from-rose-950/40 dark:to-rose-900/10 border border-rose-200/50 dark:border-rose-800/50 rounded-xl sm:rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] relative overflow-hidden group">
                         <div className="absolute -right-4 -top-4 w-16 h-16 bg-rose-500/10 blur-xl rounded-full group-hover:scale-150 transition-transform duration-700" />
-                        <span className="text-[10px] sm:text-[11px] text-rose-600 dark:text-rose-400 font-black uppercase tracking-widest mb-1 relative z-10 flex items-center leading-tight">
-                           <ShoppingCart className="w-3.5 h-3.5 mr-1.5 opacity-80 shrink-0" />
+                        <span className="text-[10px] sm:text-[11px] xl:text-[7.5px] 2xl:text-[10px] text-rose-600 dark:text-rose-400 font-black uppercase tracking-widest mb-1 relative z-10 flex items-center leading-tight">
+                           <ShoppingCart className="w-3 h-3 xl:w-2 xl:h-2 2xl:w-3.5 2xl:h-3.5 mr-1 xl:mr-0.5 opacity-80 shrink-0" />
                            <span className="truncate">Дефицит</span>
                         </span>
-                        <span className="text-xl sm:text-2xl font-black text-rose-950 dark:text-rose-50 leading-none relative z-10 tracking-tight">
-                          {stockTotals.deficit.toFixed(3)}<span className="text-[9px] sm:text-[10px] text-rose-600/60 dark:text-rose-400/50 font-bold ml-1 uppercase">тн</span>
+                        <span className="text-xl sm:text-2xl xl:text-[13px] 2xl:text-xl font-black text-rose-950 dark:text-rose-50 leading-none relative z-10 tracking-tighter">
+                          {stockTotals.deficit.toFixed(3)}<span className="text-[9px] sm:text-[10px] xl:text-[7px] 2xl:text-[9px] text-rose-600/60 dark:text-rose-400/50 font-bold ml-1 uppercase">тн</span>
                         </span>
                       </div>
 
                       {/* Divider */}
-                      <div className="shrink-0 hidden lg:block w-px h-10 bg-slate-200/80 dark:bg-slate-800/80 mx-2 self-center" />
+                      <div className="shrink-0 hidden 2xl:block w-px h-10 bg-slate-200/80 dark:bg-slate-800/80 mx-2 self-center" />
 
-                      {/* Item 3: Остаток на складе */}
-                      <div className="shrink-0 snap-start flex flex-col min-w-[110px] sm:min-w-[120px] justify-center px-4 py-2.5 sm:py-3 bg-white dark:bg-[#1A1C19] border border-slate-100 dark:border-slate-800/80 rounded-xl sm:rounded-2xl shadow-[0_1px_2px_rgba(0,0,0,0.02)] hover:shadow-md transition-shadow">
-                        <span className="text-[10px] sm:text-[11px] text-sky-500 dark:text-sky-400 font-black uppercase tracking-widest mb-1 flex items-center leading-tight truncate">
+                      {/* Item 3: Остаток заг. */}
+                      <div className="shrink-0 xl:shrink snap-start flex flex-col min-w-[110px] sm:min-w-[120px] xl:min-w-0 xl:flex-1 justify-center px-4 py-2.5 sm:py-3 xl:px-1 bg-white dark:bg-[#1A1C19] border border-slate-100 dark:border-slate-800/80 rounded-xl sm:rounded-2xl shadow-[0_1px_2px_rgba(0,0,0,0.02)] hover:shadow-md transition-shadow">
+                        <span className="text-[10px] sm:text-[11px] xl:text-[7.5px] 2xl:text-[10px] text-sky-500 dark:text-sky-400 font-black uppercase tracking-widest mb-1 flex items-center leading-tight truncate">
                           Остаток заг.
                         </span>
-                        <span className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white leading-none tracking-tight">
-                          {stockTotals.remaining.toFixed(3)}<span className="text-[9px] sm:text-[10px] text-slate-400/80 dark:text-slate-500 font-bold ml-1 uppercase">тн</span>
+                        <span className="text-xl sm:text-2xl xl:text-[13px] 2xl:text-xl font-black text-slate-800 dark:text-white leading-none tracking-tighter">
+                          {stockTotals.remaining.toFixed(3)}<span className="text-[9px] sm:text-[10px] xl:text-[7px] 2xl:text-[9px] text-slate-400/80 dark:text-slate-500 font-bold ml-1 uppercase">тн</span>
                         </span>
                       </div>
 
                       {/* Item 4: Тех. отходы 2 */}
-                      <div className="shrink-0 snap-start flex flex-col min-w-[110px] sm:min-w-[120px] justify-center px-4 py-2.5 sm:py-3 bg-white dark:bg-[#1A1C19] border border-slate-100 dark:border-slate-800/80 rounded-xl sm:rounded-2xl shadow-[0_1px_2px_rgba(0,0,0,0.02)] hover:shadow-md transition-shadow">
-                        <span className="text-[10px] sm:text-[11px] text-amber-500 dark:text-amber-400 font-black uppercase tracking-widest mb-1 flex items-center leading-tight truncate">
+                      <div className="shrink-0 xl:shrink snap-start flex flex-col min-w-[110px] sm:min-w-[120px] xl:min-w-0 xl:flex-1 justify-center px-4 py-2.5 sm:py-3 xl:px-1 bg-white dark:bg-[#1A1C19] border border-slate-100 dark:border-slate-800/80 rounded-xl sm:rounded-2xl shadow-[0_1px_2px_rgba(0,0,0,0.02)] hover:shadow-md transition-shadow">
+                        <span className="text-[10px] sm:text-[11px] xl:text-[7.5px] 2xl:text-[10px] text-amber-500 dark:text-amber-400 font-black uppercase tracking-widest mb-1 flex items-center leading-tight truncate">
                           Тех. отходы 2
                         </span>
-                        <span className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white leading-none tracking-tight">
-                          {((stockTotals as any).techWaste2 || 0).toFixed(3)}<span className="text-[9px] sm:text-[10px] text-slate-400/80 dark:text-slate-500 font-bold ml-1 uppercase">тн</span>
+                        <span className="text-xl sm:text-2xl xl:text-[13px] 2xl:text-xl font-black text-slate-800 dark:text-white leading-none tracking-tighter">
+                          {((stockTotals as any).techWaste2 || 0).toFixed(3)}<span className="text-[9px] sm:text-[10px] xl:text-[7px] 2xl:text-[9px] text-slate-400/80 dark:text-slate-500 font-bold ml-1 uppercase">тн</span>
                         </span>
                       </div>
 
                       {/* Item 5: Дел. остатки 2 */}
-                      <div className="shrink-0 snap-start flex flex-col min-w-[110px] sm:min-w-[120px] justify-center px-4 py-2.5 sm:py-3 bg-white dark:bg-[#1A1C19] border border-slate-100 dark:border-slate-800/80 rounded-xl sm:rounded-2xl shadow-[0_1px_2px_rgba(0,0,0,0.02)] hover:shadow-md transition-shadow">
-                        <span className="text-[10px] sm:text-[11px] text-amber-500 dark:text-amber-400 font-black uppercase tracking-widest mb-1 flex items-center leading-tight truncate">
+                      <div className="shrink-0 xl:shrink snap-start flex flex-col min-w-[110px] sm:min-w-[120px] xl:min-w-0 xl:flex-1 justify-center px-4 py-2.5 sm:py-3 xl:px-1 bg-white dark:bg-[#1A1C19] border border-slate-100 dark:border-slate-800/80 rounded-xl sm:rounded-2xl shadow-[0_1px_2px_rgba(0,0,0,0.02)] hover:shadow-md transition-shadow">
+                        <span className="text-[10px] sm:text-[11px] xl:text-[7.5px] 2xl:text-[10px] text-amber-500 dark:text-amber-400 font-black uppercase tracking-widest mb-1 flex items-center leading-tight truncate">
                           Дел. остатки 2
                         </span>
-                        <span className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white leading-none tracking-tight">
-                          {((stockTotals as any).usefulRem2 || 0).toFixed(3)}<span className="text-[9px] sm:text-[10px] text-slate-400/80 dark:text-slate-500 font-bold ml-1 uppercase">тн</span>
+                        <span className="text-xl sm:text-2xl xl:text-[13px] 2xl:text-xl font-black text-slate-800 dark:text-white leading-none tracking-tighter">
+                          {((stockTotals as any).usefulRem2 || 0).toFixed(3)}<span className="text-[9px] sm:text-[10px] xl:text-[7px] 2xl:text-[9px] text-slate-400/80 dark:text-slate-500 font-bold ml-1 uppercase">тн</span>
                         </span>
                       </div>
 
                       {/* Item 6: СР. КИМ 2 */}
-                      <div className="shrink-0 snap-start flex flex-col min-w-[100px] sm:min-w-[110px] justify-center px-4 py-2.5 sm:py-3 bg-white dark:bg-[#1A1C19] border border-slate-100 dark:border-slate-800/80 rounded-xl sm:rounded-2xl shadow-[0_1px_2px_rgba(0,0,0,0.02)] hover:shadow-md transition-shadow">
-                        <span className="text-[10px] sm:text-[11px] text-emerald-500 dark:text-emerald-400/80 font-black uppercase tracking-widest mb-1 flex items-center leading-tight truncate">
+                      <div className="shrink-0 xl:shrink snap-start flex flex-col min-w-[100px] sm:min-w-[110px] xl:min-w-0 xl:flex-1 justify-center px-4 py-2.5 sm:py-3 xl:px-1 bg-white dark:bg-[#1A1C19] border border-slate-100 dark:border-slate-800/80 rounded-xl sm:rounded-2xl shadow-[0_1px_2px_rgba(0,0,0,0.02)] hover:shadow-md transition-shadow">
+                        <span className="text-[10px] sm:text-[11px] xl:text-[7.5px] 2xl:text-[10px] text-emerald-500 dark:text-emerald-400/80 font-black uppercase tracking-widest mb-1 flex items-center leading-tight truncate">
                           Ср. КИМ 2
                         </span>
-                        <span className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white leading-none tracking-tight">
-                          {((stockTotals as any).averageKim || 0).toFixed(3)}
+                        <span className="text-xl sm:text-2xl xl:text-[13px] 2xl:text-xl font-black text-slate-800 dark:text-white leading-none tracking-tighter">
+                          {((stockTotals as any).averageKim || 0).toFixed(3)}<span className="text-[9px] sm:text-[10px] xl:text-[7px] 2xl:text-[9px] text-emerald-500/60 dark:text-emerald-400/50 font-bold ml-1 uppercase truncate">коэф</span>
                         </span>
                       </div>
                       
@@ -1442,7 +1473,7 @@ export function AdminPanel({
                 )}
 
                 {supplySection === "calc" && calculationResults.length > 0 && (
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-col xl:flex-row items-stretch xl:items-center gap-1.5 sm:gap-2 w-full xl:w-auto mt-2 xl:mt-0 shrink-0 mb-2 xl:mb-0">
                     <button
                       onClick={() => {
                         const headers = ["НТД", "Профиль", "Марка заг.", "Размер мм. (Заг.)", "Длина мм.", "Кол-во тн заг."];
@@ -1480,7 +1511,7 @@ export function AdminPanel({
                         setCopySuccess(true);
                         setTimeout(() => setCopySuccess(false), 2000);
                       }}
-                      className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm ${
+                      className={`flex w-full items-center justify-center gap-1.5 px-2 py-2 sm:px-4 sm:py-2 rounded-xl text-[9px] sm:text-[12px] font-bold transition-all shadow-sm ${
                         copySuccess 
                           ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" 
                           : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-50"
@@ -1489,13 +1520,13 @@ export function AdminPanel({
                     >
                       {copySuccess ? (
                         <>
-                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                          Скопировано!
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                          <span className="truncate">Скопировано!</span>
                         </>
                       ) : (
                         <>
-                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                          Копировать заявку
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                          <span className="truncate">Копировать</span>
                         </>
                       )}
                     </button>
@@ -1565,10 +1596,10 @@ export function AdminPanel({
                         XLSX.utils.book_append_sheet(workbook, worksheet, "Заявка");
                         XLSX.writeFile(workbook, "Заявка_на_сырье.xlsx");
                       }}
-                      className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition-colors shadow-sm"
+                      className="flex w-full items-center justify-center gap-1.5 px-2 py-2 sm:px-4 sm:py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-[9px] sm:text-[12px] font-bold transition-colors shadow-sm"
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                      Скачать заявку 
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                      <span className="truncate">Скачать XLSX</span>
                     </button>
                   </div>
                 )}
@@ -1829,20 +1860,20 @@ export function AdminPanel({
                            </div>
                          </div>
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto mt-2 sm:mt-0">
                          <button 
                            onClick={handleCopyForSheets}
-                           className="h-12 px-8 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-2xl text-sm font-bold transition-all flex items-center gap-2"
+                           className="h-12 w-full sm:w-auto px-6 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-2xl text-sm font-bold transition-all flex items-center justify-center gap-2"
                          >
-                           {isCopied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
-                           {isCopied ? <span className="text-emerald-500">Скопировано!</span> : "Копировать для sheets"}
+                           {isCopied ? <Check className="w-4 h-4 text-emerald-500 shrink-0" /> : <Copy className="w-4 h-4 shrink-0" />}
+                           <span className="truncate">{isCopied ? <span className="text-emerald-500">Скопировано!</span> : "Копировать для sheets"}</span>
                          </button>
                          <button 
                            onClick={handleExportStock}
-                           className="h-12 px-8 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl text-sm font-bold transition-all shadow-lg shadow-emerald-500/20 flex items-center gap-2"
+                           className="h-12 w-full sm:w-auto px-6 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl text-sm font-bold transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2"
                          >
-                           <Download className="w-4 h-4" />
-                           Скачать Excel
+                           <Download className="w-4 h-4 shrink-0" />
+                           <span className="truncate">Скачать Excel</span>
                          </button>
                       </div>
                    </div>
@@ -3546,9 +3577,9 @@ export function AdminPanel({
                   <div className="mt-4 space-y-6">
                     <div>
                       <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 mb-2 uppercase tracking-wider bg-slate-100 dark:bg-slate-800 w-fit px-3 py-1 rounded-lg">Файл: Потребности (Заказы)</h4>
-                      <p className="text-xs text-slate-500 mb-2">Убедитесь, что в файле присутствуют следующие столбцы с точными названиями, по которым система распознает данные.</p>
+                      <p className="text-xs text-slate-500 mb-2">Убедитесь, что в файле присутствуют следующие столбцы (система ищет по частичному совпадению, можно использовать вариации):</p>
                       <div className="flex flex-wrap gap-2">
-                        {["Внутренняя нумерация", "Дата отгрузки", "Клиент", "Номенклатура", "№ заказа", "Профиль", "Марка стали", "Размер", "Кол-во", "Остаток к выполнению", "Длина конечной продукции"].map(col => (
+                        {["Номенклатура", "Марка", "Клиент / Контрагент", "№ заказа / Документ", "Профиль / Тип", "Размер / Диаметр", "Кол-во / Количество", "Остаток к выполнению", "Длина конечной продукции", "Дата отгрузки", "Внутренняя нумерация"].map(col => (
                           <span key={col} className="px-2 py-1 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded text-xs font-mono text-slate-600 dark:text-slate-400">
                             {col}
                           </span>
@@ -3558,9 +3589,9 @@ export function AdminPanel({
 
                     <div>
                       <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 mb-2 uppercase tracking-wider bg-slate-100 dark:bg-slate-800 w-fit px-3 py-1 rounded-lg">Файл: Складские Остатки</h4>
-                      <p className="text-xs text-slate-500 mb-2">Обязательные колонки:</p>
+                      <p className="text-xs text-slate-500 mb-2">Обязательные колонки (система сама распознает марку, профиль, размер и длину из наименования):</p>
                       <div className="flex flex-wrap gap-2">
-                        {["Исходная Номенклатура", "Профиль", "НТД", "Марка стали", "Размер", "Длина", "Конечный остаток тн."].map(col => (
+                        {["Номенклатура / Наименование", "Конечный остаток / Остаток / Кол-во"].map(col => (
                           <span key={col} className="px-2 py-1 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded text-xs font-mono text-slate-600 dark:text-slate-400">
                             {col}
                           </span>

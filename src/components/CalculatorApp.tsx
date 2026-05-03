@@ -277,7 +277,7 @@ export function CalculatorApp({
     const tech = totalTechCoef;
     const options = [];
     const maxBillet = Math.floor(8400 / draw);
-    const maxAllowedBillet = Math.min(8500, maxBillet);
+    const maxAllowedBillet = Math.min(6000, maxBillet);
 
     if (isND) {
        for (let b = 4000; b <= maxAllowedBillet; b += 100) {

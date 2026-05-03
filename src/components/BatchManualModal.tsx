@@ -16,7 +16,7 @@ export function BatchManualModal({ isOpen, onClose }: BatchManualModalProps) {
     },
     {
       title: "Важные столбцы",
-      description: "Убедитесь, что в файле присутствуют следующие столбцы с точными названиями, по которым система распознает данные: 'Внутренняя нумерация' (или №), 'Марка стали', 'Размер', 'Номенклатура', 'Профиль', и 'Остаток к выполнению' (или 'Кол-во').",
+      description: "Убедитесь, что в файле присутствуют следующие столбцы (система распознает их по частичному совпадению): 'Внутренняя нумерация' (или №), 'Марка', 'Размер', 'Номенклатура', 'Профиль', и 'Остаток к выполнению' (или 'Кол-во').",
       icon: <Info className="w-5 h-5 text-blue-500" />
     },
     {
@@ -124,7 +124,7 @@ export function BatchManualModal({ isOpen, onClose }: BatchManualModalProps) {
                   <li className="flex items-start gap-3">
                     <div className="mt-1.5 w-1.5 h-1.5 rounded-full bg-white/20 shrink-0" />
                     <p className="text-xs sm:text-sm font-medium leading-relaxed opacity-90 text-slate-200">
-                      <strong className="text-white">Длина:</strong> Опционально. Если указана длина конечной детали (например 3000-8500), система вычислит идеальную длину заготовки, чтобы минимизировать остатки.
+                      <strong className="text-white">Длина:</strong> Опционально. Если указана длина конечной детали (например 3000-6000), система вычислит идеальную длину заготовки, чтобы минимизировать остатки.
                     </p>
                   </li>
                 </ul>
