@@ -345,7 +345,7 @@ export function AdminPanel({
     };
 
     const isMatch = (stock: any, res: any) => {
-      if (stock["Профиль"]?.toLowerCase() !== res.type?.toLowerCase()) return false;
+      if (stock["Профиль"]?.toLowerCase() !== "круг") return false;
       if (stock["Марка стали"]?.toLowerCase() !== res.grade?.toLowerCase()) return false;
       if (parseFloat(String(stock["Размер"]).replace(',', '.')) !== res.billetDia) return false;
       
