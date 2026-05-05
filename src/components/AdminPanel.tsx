@@ -150,9 +150,7 @@ export function AdminPanel({
         
         const newKim = newDrawLen > 0 ? newActualUL / newDrawLen : 0;
         const newTotalWeight = newKim > 0 ? item.remainingToProcess / newKim : item.remainingToProcess;
-        const billetArea = item.type === "Шестигранник" 
-          ? (Math.sqrt(3) / 2) * Math.pow(item.billetDia, 2)
-          : (Math.PI * Math.pow(item.billetDia, 2)) / 4;
+        const billetArea = (Math.PI * Math.pow(item.billetDia, 2)) / 4;
         const wPerM = billetArea * 0.00000785 * 1000;
         const singleBMass = (newBilletLength / 1000) * wPerM;
         const newBilletCount = singleBMass > 0 ? Math.ceil((newTotalWeight * 1000) / singleBMass) : 0;
@@ -818,9 +816,7 @@ export function AdminPanel({
         }
         // ----------------------------------------------
 
-        const billetArea = item.type === "Шестигранник" 
-          ? (Math.sqrt(3) / 2) * Math.pow(billetDia, 2)
-          : (Math.PI * Math.pow(billetDia, 2)) / 4;
+        const billetArea = (Math.PI * Math.pow(billetDia, 2)) / 4;
         const weightPerMBillet = billetArea * 0.00000785 * 1000; 
 
         const kim = drawLength > 0 ? actualUsefulLength / drawLength : 0;
@@ -2516,9 +2512,7 @@ export function AdminPanel({
                                                   }
                                                   const newKim = newDrawLen > 0 ? newActualUL / newDrawLen : 0;
                                                   const newTotalWeight = newKim > 0 ? item.remainingToProcess / newKim : item.remainingToProcess;
-                                                  const billetArea = item.type === "Шестигранник" 
-                                                    ? (Math.sqrt(3) / 2) * Math.pow(item.billetDia, 2)
-                                                    : (Math.PI * Math.pow(item.billetDia, 2)) / 4;
+                                                  const billetArea = (Math.PI * Math.pow(item.billetDia, 2)) / 4;
                                                   const wPerM = billetArea * 0.00000785 * 1000;
                                                   const singleBMass = (newBilletLength / 1000) * wPerM;
                                                   const newBilletCount = singleBMass > 0 ? Math.ceil((newTotalWeight * 1000) / singleBMass) : 0;
